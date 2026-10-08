@@ -160,6 +160,13 @@ class WebSocketService(private val allowLocalTestServer: Boolean = false) {
         }
     }
 
+    /** Xiaozhi's text-input path; never opens capture or sends Opus packets. */
+    @Synchronized fun sendText(text: String): Boolean {
+        if (!com.xiaozhi.simple.model.TypedChat.valid(text)) return false
+        return send(mapOf("type" to "listen", "state" to "detect",
+            "text" to text.trim(), "session_id" to sessionId))
+    }
+
     @Synchronized fun startListening(): Boolean = send(mapOf("type" to "listen", "state" to "start", "mode" to "manual", "session_id" to sessionId))
     @Synchronized fun stopListening() { send(mapOf("type" to "listen", "state" to "stop", "session_id" to sessionId)) }
     @Synchronized fun sendAbort() { send(mapOf("type" to "abort", "session_id" to sessionId)) }

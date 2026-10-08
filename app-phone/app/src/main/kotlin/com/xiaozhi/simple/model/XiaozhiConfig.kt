@@ -6,5 +6,6 @@ data class XiaozhiConfig(
     val deviceId: String = "",
     val autoConnect: Boolean = true,
     val volumePtt: Int = 0,
-    val animateAvatar: Boolean = true
+    val animateAvatar: Boolean = true,
+    val depthGraphics: Boolean = false
 )

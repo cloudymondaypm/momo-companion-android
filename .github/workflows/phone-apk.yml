@@ -14,6 +14,12 @@ jobs:
         with: {distribution: temurin, java-version: '17', cache: gradle}
       - name: Install Android components
         run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;25.1.8937393' 'cmake;3.22.1'
+      - name: Validate 3D depth shaders
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y glslang-tools
+          glslangValidator -S vert app-phone/app/src/main/res/raw/momo_depth_vertex.glsl
+          glslangValidator -S frag app-phone/app/src/main/res/raw/momo_depth_fragment.glsl
       - run: chmod +x app-phone/gradlew && ./app-phone/gradlew -p app-phone assembleDebug testDebugUnitTest
       - uses: actions/upload-artifact@v4
         with: {name: momo-companion-phone-debug, path: app-phone/app/build/outputs/apk/debug/*.apk, if-no-files-found: error}
