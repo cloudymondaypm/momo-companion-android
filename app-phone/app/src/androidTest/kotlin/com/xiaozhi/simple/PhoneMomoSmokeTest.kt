@@ -19,6 +19,10 @@ import androidx.test.uiautomator.StaleObjectException
 import com.xiaozhi.simple.ui.avatar.MomoDepthView
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Rule
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsNotEnabled
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -26,6 +30,7 @@ import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class PhoneMomoSmokeTest {
+    @get:Rule val compose = createEmptyComposeRule()
     @Test fun offlinePhoneRendersDepthAndKeepsPlayDressAndTypingAccessible() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
@@ -114,7 +119,7 @@ class PhoneMomoSmokeTest {
                 device.wait(Until.hasObject(By.text("Hello Momo")),5000))
             val sendButton = device.findObject(By.desc("Send typed message"))
             assertNotNull("Accessible Send button must be present",sendButton)
-            assertFalse("Send must be disabled offline",sendButton.isEnabled)
+            compose.onNodeWithText("Send").assertIsNotEnabled()
             device.pressBack()
             assertTrue(device.wait(Until.hasObject(By.text("Hello Momo")),5000))
         }
