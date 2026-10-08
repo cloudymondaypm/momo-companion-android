@@ -3,6 +3,18 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Optional persistent signer for repeatable APK upgrades. If not configured,
+// local builds and pull-request previews continue using Android's debug signer.
+val watchStorePath = System.getenv("MOMO_WATCH_KEYSTORE_PATH")
+val watchStorePassword = System.getenv("MOMO_WATCH_KEYSTORE_PASSWORD")
+val watchKeyAlias = System.getenv("MOMO_WATCH_KEY_ALIAS")
+val watchKeyPassword = System.getenv("MOMO_WATCH_KEY_PASSWORD")
+val hasStableWatchSigner = listOf(watchStorePath, watchStorePassword,
+    watchKeyAlias, watchKeyPassword).all { !it.isNullOrBlank() }
+if (hasStableWatchSigner && !file(watchStorePath!!).isFile) {
+    throw GradleException("Configured watch signing file does not exist")
+}
+
 android {
     namespace = "com.xiaozhi.simple"
     compileSdk = 34
@@ -36,11 +48,28 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasStableWatchSigner) {
+            create("watchStable") {
+                storeFile = file(watchStorePath!!)
+                storePassword = watchStorePassword!!
+                keyAlias = watchKeyAlias!!
+                keyPassword = watchKeyPassword!!
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (hasStableWatchSigner) {
+                signingConfig = signingConfigs.getByName("watchStable")
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasStableWatchSigner) signingConfigs.getByName("watchStable")
+                else signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

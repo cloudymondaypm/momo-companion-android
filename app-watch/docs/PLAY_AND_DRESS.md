@@ -19,7 +19,7 @@ Momo continues to reflect Xiaozhi speaking/listening/emotion states. Games run e
 
 ## Device and performance
 
-Designed for the Kiumo ZH23-YL-RF running Android 8.1/API 26. The avatar remains native vector art and updates at approximately 11fps while idle and 25fps while reacting or speaking to reduce idle drawing work. Animation is suspended for app dialogs, background use, and reduced-motion mode. The games do not need an internet connection, but voice chat still needs the configured server.
+Designed for the Kiumo ZH23-YL-RF running Android 8.1 (API 27; minimum supported API 26). The avatar remains native vector art and updates at approximately 11fps while idle and 25fps while reacting or speaking to reduce idle drawing work. Animation is suspended for app dialogs, background use, and reduced-motion mode. The games do not need an internet connection, but voice chat still needs the configured server.
 
 ## Verification
 

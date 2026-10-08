@@ -52,7 +52,22 @@ chmod +x gradlew
 
 APK: `app/build/outputs/apk/release/app-release.apk`.
 
-The release variant is currently signed with the local Android debug key for convenient installation. Signing keys are not distributed. A build on another computer may use a different signing key and cannot update an APK signed by the original key. For public releases, configure your own private release signing key and retain it for future updates. Do not commit keys or passwords to GitHub.
+Without additional configuration, release and debug APKs use the local Android debug key. Different GitHub-hosted runners often generate different debug keys, so preview APKs may **not** install over an existing APK with the same package name. Save any settings/pairing details before a necessary uninstall.
+
+### Persistent signing for updates (optional, recommended)
+
+For repeatable in-place upgrades on the watch, securely generate and **back up one permanent private keystore**, then add these four GitHub repository **Actions secrets** (Settings → Secrets and variables → Actions):
+
+- `MOMO_WATCH_SIGNING_KEYSTORE_BASE64`: Base64-encoded keystore file; encode the binary file as one continuous line (on Linux, `base64 -w0 your-watch.jks`; on Windows PowerShell, `[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\watch.jks"))`).
+- `MOMO_WATCH_SIGNING_STORE_PASSWORD`: Keystore password.
+- `MOMO_WATCH_SIGNING_KEY_ALIAS`: Alias selected when generating the key.
+- `MOMO_WATCH_SIGNING_KEY_PASSWORD`: Private-key password.
+
+GitHub Actions restores these secrets **only for trusted pushes to `main` or manually initiated `workflow_dispatch` runs**, never for pull requests or ordinary feature-branch pushes. If all four are configured, the build signs its debug APK with the persistent certificate; otherwise it uses the default debug signer. Partial configuration causes the trusted job to fail rather than silently produce an APK signed with a different key. Private keys are never committed or included in the APK artifact.
+
+Locally, set environment variables `MOMO_WATCH_KEYSTORE_PATH`, `MOMO_WATCH_KEYSTORE_PASSWORD`, `MOMO_WATCH_KEY_ALIAS` and `MOMO_WATCH_KEY_PASSWORD` to use the same signer.
+
+**Important:** A newly configured persistent key still cannot update an *older APK already signed with a different key*. Preserve the original keystore if you have one. A one-time uninstall/re-pair may be required when migrating. Keep the permanent signing key backed up securely; losing it prevents future in-place updates.
 
 ## Connect
 
