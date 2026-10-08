@@ -27,6 +27,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -97,22 +98,19 @@ class PhoneMomoSmokeTest {
             compose.onNodeWithText("Dress").performScrollTo().performClick()
             compose.onNodeWithText("Momo's wardrobe").assertIsDisplayed()
             device.pressBack()
-            assertTrue(device.wait(Until.hasObject(By.text("Play")),5000))
             compose.onNodeWithText("Play").performScrollTo().performClick()
             compose.onNodeWithText("Play Momo Says").assertIsDisplayed()
             compose.onNodeWithText("Play Momo Says").performClick()
-            assertTrue(device.wait(Until.hasObject(By.text("Stop")),5000))
             compose.onNodeWithText("Stop").performScrollTo().performClick()
             // Compose resolves current nodes after IME resize instead of retaining stale handles.
             compose.onNode(hasSetTextAction()).assertIsDisplayed().performClick()
             device.waitForIdle()
             compose.onNode(hasSetTextAction()).performTextInput("Hello Momo")
             compose.onNodeWithText("Hello Momo").assertIsDisplayed()
-            val sendButton = device.findObject(By.desc("Send typed message"))
-            assertNotNull("Accessible Send button must be present",sendButton)
+            compose.onNodeWithContentDescription("Send typed message").assertIsDisplayed()
             compose.onNodeWithText("Send").assertIsNotEnabled()
             device.pressBack()
-            assertTrue(device.wait(Until.hasObject(By.text("Hello Momo")),5000))
+            compose.onNodeWithText("Hello Momo").assertIsDisplayed()
         }
     }
 }
