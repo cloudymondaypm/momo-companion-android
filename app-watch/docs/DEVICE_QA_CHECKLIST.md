@@ -1,4 +1,4 @@
-# Kiumo ZH23-YL-RF watch acceptance checklist (v0.4.2)
+# Kiumo ZH23-YL-RF watch acceptance checklist (v0.4.5)
 
 This is a **manual test plan**, not a claim that the physical watch has been tested.
 Target device: Kiumo ZH23-YL-RF, Android 8.1 (API 27). Minimum app API is 26.
@@ -43,6 +43,36 @@ Target device: Kiumo ZH23-YL-RF, Android 8.1 (API 27). Minimum app API is 26.
 | Offline play | Dress, petting and local games continue without Wi-Fi | |
 | Reconnect | Voice can reconnect to the configured self-hosted server | |
 | Watch battery / heat | Observe any unexpected drain or warming over 15 minutes | |
+
+## Display timeout and offline acceptance (required before leaving draft)
+
+- Fresh install: default display idle timeout is 2 minutes.
+- Settings: select 30 seconds, 1, 2, 5 or 10 minutes; selection saves immediately,
+  survives restart and does not reconnect or change Android global timeout/brightness.
+- Leave the main screen, Settings, wardrobe and games picker untouched: at the selected
+  deadline the app becomes black, window brightness goes to minimum and every app
+  window releases KEEP_SCREEN_ON. Idle surprises/animation must not extend this deadline.
+- API 27 cannot force hardware screen-off via ordinary public app APIs. Minimum brightness
+  may still leave a faint backlight; physical panel sleep follows the watch OS timeout.
+  Record observed backlight and physical sleep delay on this exact device.
+- Tap/swipe or delivered hardware keys before expiry restart the timer. The first
+  wake gesture is consumed (no game move or microphone recording). If Android has
+  slept, wake with the watch power button. Android retains ownership of power/lock keys.
+- Background the app or turn the screen off: no idle timer or screen-on flag remains;
+  return to Momo with normal brightness and a fresh timer. Test wake after a dialog.
+- Let the timeout expire while holding Talk: recording stops. Timeout does not
+  disconnect the transport or erase local rewards/style.
+- Cold launch with Wi-Fi off, failed connection, and missing binding/token:
+  all six tap reactions, all six body-part swipes and cuddles work; Momo stays happy.
+- In every offline state: all 7 outfits and 7 accessories save locally; complete
+  each of the four games and verify one saved star. Restart offline and check persistence.
+- Offline Talk is gray and explains connecting in Settings. Tapping it does not
+  prompt for microphone permission. A mapped side button does not record offline.
+- Connect successfully: touch and side-button hold-to-talk work after granting
+  microphone permission. Disconnect during recording/playback: audio stops and local
+  play continues. Merely connecting/activating is insufficient to enable Talk.
+- Save local settings without server reconnect; use Connect explicitly after editing
+  server configuration. Device QA and battery/heat observations remain outstanding.
 
 ## Report
 

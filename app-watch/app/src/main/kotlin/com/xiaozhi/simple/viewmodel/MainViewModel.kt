@@ -8,6 +8,7 @@ import android.content.Context
 import android.view.KeyEvent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.xiaozhi.simple.model.WatchAvailability
 import com.xiaozhi.simple.model.ConnectionState
 import com.xiaozhi.simple.model.AvatarMood
 import com.xiaozhi.simple.model.AvatarMoodResolver
@@ -89,7 +90,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         setupAudioCallbacks()
         viewModelScope.launch {
             connectionState.collect { state ->
-                if (state !is ConnectionState.Connected) onPressEnd()
+                if (!WatchAvailability.canTalk(state)) {
+                    onPressEnd()
+                    audioService.stopPlayback()
+                    _deviceState.value = DeviceState.IDLE
+                    _awaitingReply.value = false
+                    replyTimeout?.cancel()
+                }
                 when (state) {
                     is ConnectionState.Error -> _connectionMessage.value = state.message
                     is ConnectionState.Connected -> {
@@ -189,10 +196,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         webSocketService.onAudioData = { audioData ->
+            if (WatchAvailability.canTalk(connectionState.value)) {
             _awaitingReply.value = false
             if (_deviceState.value != DeviceState.LISTENING) {
                 _deviceState.value = DeviceState.SPEAKING
                 audioService.playAudio(audioData)
+            }
             }
         }
 
@@ -261,7 +270,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onPressStart() {
         if (ContextCompat.checkSelfPermission(getApplication(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
-        if (connectionState.value !is ConnectionState.Connected) {
+        if (!WatchAvailability.canTalk(connectionState.value)) {
             return
         }
 

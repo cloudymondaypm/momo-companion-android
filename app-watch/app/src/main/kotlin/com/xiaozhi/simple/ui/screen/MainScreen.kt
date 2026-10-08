@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
@@ -51,6 +52,8 @@ import com.xiaozhi.simple.model.ConnectionState
 import com.xiaozhi.simple.model.DeviceState
 import com.xiaozhi.simple.model.MessageType
 import com.xiaozhi.simple.model.XiaozhiConfig
+import com.xiaozhi.simple.display.*
+import com.xiaozhi.simple.model.WatchAvailability
 import com.xiaozhi.simple.model.AvatarMood
 import com.xiaozhi.simple.ui.avatar.*
 import kotlinx.coroutines.delay
@@ -62,13 +65,13 @@ import com.xiaozhi.simple.viewmodel.MainViewModel
 fun MainScreen(viewModel: MainViewModel) {
     val micPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
 
-    LaunchedEffect(Unit) {
-        if (!micPermission.status.isGranted) micPermission.launchPermissionRequest()
-    }
+    val display = LocalWatchDisplay.current
+    val displaySleeping by display.sleeping.collectAsState()
 
     val messages by viewModel.messages.collectAsState()
     val deviceState by viewModel.deviceState.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
+    val canTalk = WatchAvailability.canTalk(connectionState)
     val avatarMood by viewModel.avatarMood.collectAsState()
     val awaitingReply by viewModel.awaitingReply.collectAsState()
     val connectionMessage by viewModel.connectionMessage.collectAsState()
@@ -192,24 +195,18 @@ fun MainScreen(viewModel: MainViewModel) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val mood = when {
-        deviceState == DeviceState.LISTENING -> AvatarMood.LISTENING
-        connectionState is ConnectionState.Connecting || awaitingReply -> AvatarMood.THINKING
-        connectionState !is ConnectionState.Connected -> AvatarMood.SLEEPY
-        else -> avatarMood
-    }
+    val mood = WatchAvailability.mood(connectionState, deviceState, awaitingReply, avatarMood)
 
     // Every touch resets the idle timer; nothing runs in the background, dialogs,
     // voice sessions, active games or reduced-motion mode. No network calls.
-    LaunchedEffect(foreground, showSettings, showWardrobe, showGames, config.reduceMotion,
+    LaunchedEffect(foreground, displaySleeping, showSettings, showWardrobe, showGames, config.reduceMotion,
         deviceState, awaitingReply, connectionState is ConnectionState.Connecting,
         game, reactionTick) {
         val allowed = AvatarIdle.canSurprise(
-            foreground = foreground,
+            foreground = foreground && !displaySleeping,
             dialogOpen = showSettings || showWardrobe || showGames,
             reducedMotion = config.reduceMotion,
-            voiceBusy = deviceState != DeviceState.IDLE || awaitingReply ||
-                connectionState is ConnectionState.Connecting,
+            voiceBusy = canTalk && (deviceState != DeviceState.IDLE || awaitingReply),
             gameActive = game != AvatarGame.NONE
         )
         if (allowed) {
@@ -305,7 +302,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 contentAlignment = Alignment.Center
             ) {
                 MomoAvatar(mood, speaking = deviceState == DeviceState.SPEAKING,
-                    animated = foreground && !showSettings && !showWardrobe &&
+                    animated = foreground && !displaySleeping && !showSettings && !showWardrobe &&
                         !showGames && !config.reduceMotion,
                     reaction = reaction, reactionTick = reactionTick,
                     style = AvatarStyle(outfit, accessory),
@@ -374,12 +371,18 @@ fun MainScreen(viewModel: MainViewModel) {
                         .height(44.dp)
                         .background(
                             if (deviceState == DeviceState.LISTENING) Color(0xFF318D73)
-                            else Color(0xFF7756A6), RoundedCornerShape(24.dp)
+                            else if (canTalk) Color(0xFF7756A6) else Color.Gray, RoundedCornerShape(24.dp)
                         )
-                        .semantics { contentDescription = "Hold to talk to Momo; release to send" }
-                        .pointerInput(viewModel, micPermission.status.isGranted) {
+                        .semantics {
+                            contentDescription = if (canTalk) "Hold to talk to Momo; release to send"
+                                else "Talk unavailable: connect to server in Settings"
+                            if (!canTalk) disabled()
+                        }
+                        .pointerInput(viewModel, micPermission.status.isGranted, canTalk) {
                             detectTapGestures(onPress = {
-                                if (!micPermission.status.isGranted) {
+                                if (!canTalk) {
+                                    // Local play remains available; offline taps never request a microphone.
+                                } else if (!micPermission.status.isGranted) {
                                     micPermission.launchPermissionRequest()
                                 } else {
                                     viewModel.onPressStart()
@@ -390,7 +393,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        if (deviceState == DeviceState.LISTENING) "Release" else "🎙 Talk",
+                        if (!canTalk) "Talk offline" else if (deviceState == DeviceState.LISTENING) "Release" else "🎙 Talk",
                         color = Color.White, fontWeight = FontWeight.Bold,
                         fontSize = if (compact) 11.sp else 13.sp
                     )
@@ -402,6 +405,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 text = when {
                     keyLearning -> "Press a physical button"
                     game != AvatarGame.NONE && reactionMessage.isNotBlank() -> reactionMessage
+                    !canTalk -> "Play & Dress offline • connect in ⚙ to talk"
                     pttKeyCode == KeyEvent.KEYCODE_UNKNOWN -> "Hold 🎙 to talk • side button in ⚙"
                     deviceState == DeviceState.LISTENING -> "Release to send"
                     else -> "Hold 🎙 or side button to talk"
@@ -490,7 +494,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 showSettings = false
             },
             onSave = {
-                viewModel.saveConfigAndReconnect(it)
+                viewModel.saveConfig(it)
                 showSettings = false
             }
         )
@@ -522,11 +526,14 @@ private fun WatchSettingsDialog(
     var otaUrl by remember(config.otaUrl) { mutableStateOf(config.otaUrl) }
     var reduceMotion by remember(config.reduceMotion) { mutableStateOf(config.reduceMotion) }
     val keyFocus = remember { FocusRequester() }
+    val display = LocalWatchDisplay.current
+    val timeoutSeconds by display.timeoutSeconds.collectAsState()
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        BindWatchDialog()
         Surface(
             modifier = Modifier
                 .fillMaxSize()
@@ -558,6 +565,20 @@ private fun WatchSettingsDialog(
                     }
                 }
 
+                Text("Display auto-off", fontWeight = FontWeight.SemiBold)
+                Text("After inactivity, Momo goes dark. Android controls physical sleep.",
+                    style = MaterialTheme.typography.bodySmall)
+                WatchDisplayController.TIMEOUT_OPTIONS.forEach { seconds ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = timeoutSeconds == seconds,
+                            onClick = { display.setTimeout(seconds) })
+                        Text(if (seconds < 60) "$seconds seconds"
+                            else "${seconds / 60} minutes")
+                    }
+                }
+                Text("Display choice saves immediately. Tap the dark screen to wake Momo; use the power button if Android has slept.",
+                    style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider()
                 if (connectionMessage.isNotBlank()) {
                     Text(connectionMessage, style = MaterialTheme.typography.bodySmall)
                 }
@@ -670,7 +691,7 @@ private fun WatchSettingsDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Save & reconnect")
+                    Text("Save")
                 }
             }
         }
@@ -687,12 +708,14 @@ private fun MomoWardrobeDialog(
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        BindWatchDialog()
         Surface(modifier = Modifier.fillMaxSize().padding(8.dp),
             shape = MaterialTheme.shapes.large) {
             Column(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
+                Text("Saved on this watch • works offline", fontSize = 11.sp)
                 Text("Momo's wardrobe", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Box(Modifier.fillMaxWidth().height(118.dp), contentAlignment = Alignment.Center) {
                     MomoAvatar(
@@ -752,12 +775,14 @@ private fun MomoGamesDialog(
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        BindWatchDialog()
         Surface(modifier = Modifier.fillMaxSize().padding(8.dp),
             shape = MaterialTheme.shapes.large) {
             Column(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Text("All four games work offline.", fontSize = 11.sp)
                 Text("Play with Momo", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text("Momo Says: touch the body part Momo names (5 rounds).",
                     fontSize = 11.sp)
