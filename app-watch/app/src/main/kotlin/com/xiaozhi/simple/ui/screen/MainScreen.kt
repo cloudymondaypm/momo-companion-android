@@ -185,6 +185,28 @@ fun MainScreen(viewModel: MainViewModel) {
         else -> avatarMood
     }
 
+    // Every touch resets the idle timer; nothing runs in the background, dialogs,
+    // voice sessions, active games or reduced-motion mode. No network calls.
+    LaunchedEffect(foreground, showSettings, showWardrobe, showGames, config.reduceMotion,
+        deviceState, awaitingReply, connectionState is ConnectionState.Connecting,
+        game, reactionTick) {
+        val allowed = AvatarIdle.canSurprise(
+            foreground = foreground,
+            dialogOpen = showSettings || showWardrobe || showGames,
+            reducedMotion = config.reduceMotion,
+            voiceBusy = deviceState != DeviceState.IDLE || awaitingReply ||
+                connectionState is ConnectionState.Connecting,
+            gameActive = game != AvatarGame.NONE
+        )
+        if (allowed) {
+            delay(AvatarIdle.SURPRISE_DELAY_MS)
+            val surprise = AvatarIdle.nextSurprise(reactionTick)
+            reaction = surprise
+            reactionMessage = surprise.caption
+            reactionTick++
+        }
+    }
+
     // Keep the next step visible even while Momo giggles or celebrates.
     val gameInstruction = when (game) {
         AvatarGame.MOMO_SAYS -> "Tap ${momoSequence.getOrNull(gameProgress)?.label ?: "head"} · ${gameProgress + 1}/${momoSequence.size}"

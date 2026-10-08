@@ -74,6 +74,8 @@ class MomoRenderer {
             AvatarReaction.WIGGLE -> wiggle * 8f
             AvatarReaction.WAVE -> 5f
             AvatarReaction.CUDDLE -> -5f
+            AvatarReaction.PEEK -> -11f * burst
+            AvatarReaction.SILLY -> 9f * burst
             else -> 0f
         }
         canvas.rotate((if (mood == AvatarMood.CURIOUS) -5f + wave else wave * 1.5f) +
@@ -130,7 +132,10 @@ class MomoRenderer {
             reaction == AvatarReaction.CELEBRATE || reaction == AvatarReaction.CUDDLE || mood == AvatarMood.CALM ||
             mood == AvatarMood.SLEEPY || mood == AvatarMood.EXCITED
         for (x in listOf(76f,124f)) {
-            if (softEyes) {
+            if (reaction == AvatarReaction.PEEK && x == 76f) {
+                line(ink, 3.3f)
+                curve(canvas, x-7f, 108f, x, 114f, x+7f, 108f)
+            } else if (softEyes) {
                 line(ink,3.4f)
                 curve(canvas,x-7f,110f,x,if(mood==AvatarMood.EXCITED)100f else 116f,x+7f,110f)
             } else {
@@ -145,7 +150,12 @@ class MomoRenderer {
             line(ink,2f); curve(canvas,116f,92f,123f,86f,131f,90f)
         }
         fill(pink); canvas.drawOval(96f,118f,104f,123f,paint)
-        if (speaking || mood==AvatarMood.EXCITED || reaction==AvatarReaction.BOOP ||
+        if (reaction == AvatarReaction.SILLY && !speaking) {
+            fill(ink); canvas.drawOval(91f, 129f, 109f, 143f, paint)
+            fill(pink); canvas.drawOval(95f, 136f, 105f, 149f, paint)
+            line(Color.rgb(232, 105, 145), 1.8f)
+            canvas.drawLine(100f, 140f, 100f, 146f, paint)
+        } else if (speaking || mood==AvatarMood.EXCITED || reaction==AvatarReaction.BOOP ||
             reaction==AvatarReaction.TICKLE || reaction==AvatarReaction.CELEBRATE) {
             val opening = if (speaking && animated) 7f+5f*(.5f+.5f*sin(seconds*13f)) else 9f
             fill(ink); canvas.drawOval(90f,131f,110f,131f+opening,paint)
@@ -235,7 +245,8 @@ class MomoRenderer {
             heart(canvas, 174f, 106f - floatUp)
         }
         if (reaction == AvatarReaction.BOOP || reaction == AvatarReaction.TICKLE ||
-            reaction == AvatarReaction.CELEBRATE) {
+            reaction == AvatarReaction.CELEBRATE || reaction == AvatarReaction.PEEK ||
+            reaction == AvatarReaction.SILLY) {
             fill(Color.rgb(255,195,98))
             star(canvas,24f,88f + wave * 3f,7f)
             star(canvas,175f,72f - wave * 3f,9f)

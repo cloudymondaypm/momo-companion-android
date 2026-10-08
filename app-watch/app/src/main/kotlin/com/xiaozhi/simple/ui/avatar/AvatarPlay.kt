@@ -11,7 +11,8 @@ enum class AvatarReaction(val caption: String) {
     NONE(""), PAT("Aww, more head pats!"), WIGGLE("Hey! My ears are ticklish!"),
     BOOP("Boop! Honk honk!"), TICKLE("Heehee! That tickles!"),
     DANCE("Look at my happy feet!"), WAVE("High five, friend!"),
-    CELEBRATE("Woohoo! We did it!"), CUDDLE("Bunny hugs and happy hearts!")
+    CELEBRATE("Woohoo! We did it!"), CUDDLE("Bunny hugs and happy hearts!"),
+    PEEK("Peekaboo! I see you!"), SILLY("Bleh! Silly bunny face!")
 }
 
 enum class AvatarOutfit(val label: String, val color: Int) {
@@ -113,4 +114,22 @@ object AvatarGames {
         val next = if (correct) progress + 1 else progress
         return GameMove(correct, next, correct && next == goal)
     }
+}
+
+/** Quiet surprises only while the watch is visible and voice/games are inactive. */
+object AvatarIdle {
+    const val SURPRISE_DELAY_MS = 16000L
+    val surprises = listOf(AvatarReaction.PEEK, AvatarReaction.SILLY,
+        AvatarReaction.WAVE, AvatarReaction.DANCE)
+
+    fun canSurprise(
+        foreground: Boolean,
+        dialogOpen: Boolean,
+        reducedMotion: Boolean,
+        voiceBusy: Boolean,
+        gameActive: Boolean
+    ): Boolean = foreground && !dialogOpen && !reducedMotion && !voiceBusy && !gameActive
+
+    fun nextSurprise(tick: Int): AvatarReaction =
+        surprises[Math.floorMod(tick, surprises.size)]
 }

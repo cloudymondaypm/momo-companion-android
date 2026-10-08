@@ -72,6 +72,38 @@ class AvatarPlayTest {
             AvatarGame.DANCE_PARTY, -1, AvatarPart.FEET))
     }
 
+    @Test fun surprisePolicyNeverInterruptsSpeakingOrGames() {
+        assertTrue(AvatarIdle.canSurprise(true, false, false, false, false))
+        assertFalse(AvatarIdle.canSurprise(false, false, false, false, false))
+        assertFalse(AvatarIdle.canSurprise(true, true, false, false, false))
+        assertFalse(AvatarIdle.canSurprise(true, false, true, false, false))
+        assertFalse(AvatarIdle.canSurprise(true, false, false, true, false))
+        assertFalse(AvatarIdle.canSurprise(true, false, false, false, true))
+        assertEquals(16000L, AvatarIdle.SURPRISE_DELAY_MS)
+        assertEquals(4, AvatarIdle.surprises.size)
+        assertEquals(AvatarReaction.PEEK, AvatarIdle.nextSurprise(0))
+        assertEquals(AvatarReaction.SILLY, AvatarIdle.nextSurprise(1))
+        assertEquals(AvatarReaction.DANCE, AvatarIdle.nextSurprise(-1))
+    }
+
+    @Test fun peekAndSillyReactionsDrawDifferentExpressions() {
+        val renderer = MomoRenderer()
+        val peek = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)
+        val silly = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)
+        renderer.draw(Canvas(peek), 200f, 200f, AvatarMood.HAPPY, 0f,
+            false, false, AvatarReaction.PEEK)
+        renderer.draw(Canvas(silly), 200f, 200f, AvatarMood.HAPPY, 0f,
+            false, false, AvatarReaction.SILLY)
+        assertFalse("Peekaboo and silly tongue must look different", peek.sameAs(silly))
+        val later = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)
+        renderer.draw(Canvas(later), 200f, 200f, AvatarMood.HAPPY, 9f,
+            false, false, AvatarReaction.SILLY)
+        assertTrue("Reduced motion should keep the silly pose static", silly.sameAs(later))
+        peek.recycle()
+        silly.recycle()
+        later.recycle()
+    }
+
     @Test fun swipePettingHasUniqueFeedbackForEveryPart() {
         val messages = AvatarPart.entries.map { AvatarTouch.strokeCaption(it) }
         assertEquals(6, messages.size)

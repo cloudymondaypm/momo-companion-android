@@ -2,14 +2,14 @@
 
 Momo Companion is a small-screen Xiaozhi Android client for the Kiumo ZH23-YL-RF watch, with a pettable, dressable mint bunny and a dedicated hold-to-talk button.
 
-Version: **0.4.2-momo-companion** (version code 18). Package: `com.kiumo.xiaozhi`.
+Version: **0.4.3-momo-companion** (version code 19). Package: `com.kiumo.xiaozhi`.
 
 ![Momo expressions](docs/Momo-Expressions.png)
 
 ## Features
 
 - Android 8.1 compatible: minimum API 26, target/compile API 34.
-- Lightweight native vector avatar: blinking, gentle movement, celebrations, and an animated talking mouth.
+- Lightweight native vector avatar: blinking, gentle movement, celebrations, an animated talking mouth and surprise Peekaboo/silly faces, waves or dances while idle.
 - Happy, excited, curious, caring, calm, listening, thinking, and sleepy expressions.
 - Server emotion messages plus local conversation-text cues; no extra AI service for avatar mood.
 - Touch Momo's ears, head, nose, hands, belly or feet for funny gestures; accurate body-shaped hit areas prevent background touches. Swipe to pet a body part or long-press for cuddles with floating hearts.
@@ -19,7 +19,7 @@ Version: **0.4.2-momo-companion** (version code 18). Package: `com.kiumo.xiaozhi
 - Physical-button push-to-talk with learn/mapping mode remains supported.
 - Microphone opens only while PTT is held and stops on release, cancellation, pause, focus loss, or connection loss.
 - Self-hosted WebSocket with automatic device-token setup and binding-code display.
-- Reduced motion and animation paused outside the foreground or while Settings is open.
+- Idle surprise gestures pause while speaking, listening, playing, in dialogs, in the background or when reduced motion is enabled.
 - Both ARM architectures, compressed native libraries, and code/resource shrinking for a small APK.
 
 See [Pet, Play, and Dress Up](docs/PLAY_AND_DRESS.md) for watch touch controls and games.
@@ -90,6 +90,6 @@ Then follow your new GitHub repository's instructions to add its remote and push
 
 ## Verification and credits
 
-The earlier Momo APK passed build/signature verification and tests. Version 0.4.2 tightens touch hit areas, isolates and tests game rules (including single-award completion), shortens small-screen prompts, and adds a quick Stop control and progress bar. Run watch CI and test gestures on physical hardware. Physical watch testing remains necessary.
+The earlier Momo APK passed build/signature verification and tests. Version 0.4.3 adds occasional expressive idle surprises (wink/peekaboo, silly face, wave, dance) without interrupting talking, games, dialogs or battery-saving reduced-motion mode. Run watch CI and test gestures on physical hardware. Physical watch testing remains necessary.
 
 Adapted from [jerrygugu/xiaozhi-android](https://github.com/jerrygugu/xiaozhi-android), commit `e2a026401247f8313262d8fc1e7400dd53fb8e4d`, under the MIT license. Bundled [Opus 1.5.2](https://github.com/xiph/opus/tree/v1.5.2), commit `ddbe48383984d56acd9e1ab6a090c54ca6b735a6`, retains its BSD license and notices. Momo artwork and watch adaptations were added for this build. See [third-party notices](THIRD_PARTY_NOTICES.md).

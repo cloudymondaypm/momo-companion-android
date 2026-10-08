@@ -15,7 +15,9 @@ Target device: Kiumo ZH23-YL-RF, Android 8.1 (API 27). Minimum app API is 26.
 | Check | Expected | Pass / Fail / Notes |
 | --- | --- | --- |
 | Startup on Android 8.1 | Watch opens without crashes; avatar is visible | |
-| Quiet idle for 1 minute | Character blinks and gently moves; no microphone opens | |
+| Quiet idle for 1 minute | Character blinks; every ~16s a playful wink, silly tongue face, wave or dance may appear; microphone remains closed | |
+| Quiet idle during a game | No spontaneous surprise interrupts game instructions | |
+| Quiet idle with Reduce Motion enabled | No idle surprises; touch response and games remain functional | |
 | Tap head and both ears | Head pat and ear wiggle; haptic/reaction | |
 | Tap nose | Distinct nose boop; does not accidentally count as head | |
 | Tap hands, belly, feet | Wave, tickle, dance respectively | |
