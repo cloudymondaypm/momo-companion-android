@@ -47,9 +47,12 @@ class MomoRenderer {
         if (scale <= 0f) return
         val wave = if (animated) sin(seconds * 2.5f) else 0f
         val wiggle = if (animated) sin(seconds * 14f) else 0f
-        val dance = if (animated && reaction == AvatarReaction.DANCE) sin(seconds * 12f) * 12f else 0f
-        val tickle = if (animated && reaction == AvatarReaction.TICKLE) wiggle * 5f else 0f
-        val jump = if (animated && reaction == AvatarReaction.CELEBRATE) -kotlin.math.abs(sin(seconds * 8f)) * 15f else 0f
+        // Reactions burst then settle over the 1.9-second gesture window.
+        // Reduced-motion mode always shows a stable pose, regardless of elapsed time.
+        val burst = if (animated) (1f - seconds / 1.9f).coerceIn(0f, 1f) else 1f
+        val dance = if (animated && reaction == AvatarReaction.DANCE) sin(seconds * 12f) * 12f * burst else 0f
+        val tickle = if (animated && reaction == AvatarReaction.TICKLE) wiggle * 5f * burst else 0f
+        val jump = if (animated && reaction == AvatarReaction.CELEBRATE) -kotlin.math.abs(sin(seconds * 8f)) * 15f * burst else 0f
         val hop = if (mood == AvatarMood.EXCITED) 5f else 2.4f
         val blink = animated && (seconds % 4.6f) > 4.36f
         canvas.save()
@@ -70,14 +73,34 @@ class MomoRenderer {
             AvatarReaction.BOOP -> 7f
             AvatarReaction.WIGGLE -> wiggle * 8f
             AvatarReaction.WAVE -> 5f
+            AvatarReaction.CUDDLE -> -5f
             else -> 0f
         }
         canvas.rotate((if (mood == AvatarMood.CURIOUS) -5f + wave else wave * 1.5f) +
             tilt + dance, 100f, 135f)
-        // Soft ears, little feet, and rounded marshmallow face.
-        fill(mint); canvas.drawOval(52f,13f,83f,100f,paint); canvas.drawOval(117f,13f,148f,100f,paint)
-        fill(Color.rgb(255,205,216)); canvas.drawOval(60f,23f,75f,79f,paint); canvas.drawOval(125f,23f,140f,79f,paint)
-        fill(mint); canvas.drawOval(60f,159f,91f,183f,paint); canvas.drawOval(109f,159f,140f,183f,paint)
+        // Independently animated ears and feet make reactions more expressive.
+        for ((baseX, direction) in listOf(52f to -1f, 117f to 1f)) {
+            canvas.save()
+            val earSway = if (animated) sin(seconds * 2.1f + direction) * 2.2f else 0f
+            val earWiggle = if (animated && reaction == AvatarReaction.WIGGLE)
+                wiggle * 11f * burst * direction else 0f
+            canvas.rotate(earSway + earWiggle, baseX + 15.5f, 95f)
+            fill(mint); canvas.drawOval(baseX,13f,baseX+31f,100f,paint)
+            fill(Color.rgb(255,205,216))
+            canvas.drawOval(baseX+8f,23f,baseX+23f,79f,paint)
+            canvas.restore()
+        }
+        // The superhero cape sits behind Momo.
+        if (style.outfit == AvatarOutfit.HERO) {
+            fill(Color.rgb(255, 111, 147))
+            path.reset(); path.moveTo(70f, 139f); path.quadTo(52f, 165f, 44f, 182f)
+            path.lineTo(156f, 182f); path.quadTo(148f, 165f, 130f, 139f); path.close()
+            canvas.drawPath(path, paint)
+        }
+        val leftKick = if (animated && reaction == AvatarReaction.DANCE)
+            sin(seconds * 13f) * 8f * burst else 0f
+        fill(mint); canvas.drawOval(60f,159f+leftKick,91f,183f+leftKick,paint)
+        canvas.drawOval(109f,159f-leftKick,140f,183f-leftKick,paint)
         paint.shader=gradient; canvas.drawOval(35f,58f,165f,178f,paint); paint.shader=null
         if (style.outfit != AvatarOutfit.CLASSIC) {
             // Rounded tunic below the face, scaled as vector art even on tiny watches.
@@ -85,13 +108,26 @@ class MomoRenderer {
             canvas.drawRoundRect(68f,145f,132f,173f,13f,13f,paint)
             fill(Color.argb(90,255,255,255))
             canvas.drawOval(79f,148f,121f,154f,paint)
+            when (style.outfit) {
+                AvatarOutfit.PAJAMAS -> {
+                    fill(Color.rgb(255, 247, 175)); star(canvas, 99f, 159f, 6f)
+                    fill(Color.rgb(255, 247, 175))
+                    canvas.drawCircle(82f, 160f, 2f, paint)
+                    canvas.drawCircle(118f, 165f, 2f, paint)
+                }
+                AvatarOutfit.HERO -> {
+                    fill(Color.rgb(255, 238, 130)); star(canvas, 100f, 159f, 9f)
+                    fill(Color.rgb(255, 111, 147)); star(canvas, 100f, 159f, 4f)
+                }
+                else -> Unit
+            }
         }
         fill(Color.argb(110,255,255,255)); canvas.drawOval(49f,70f,80f,88f,paint)
         // Tiny cloud tuft.
         fill(Color.rgb(222,255,232)); canvas.drawCircle(92f,62f,9f,paint); canvas.drawCircle(104f,60f,11f,paint)
         fill(Color.argb(150,255,153,180)); canvas.drawOval(48f,121f,71f,134f,paint); canvas.drawOval(129f,121f,152f,134f,paint)
         val softEyes = blink || reaction == AvatarReaction.PAT || reaction == AvatarReaction.TICKLE ||
-            reaction == AvatarReaction.CELEBRATE || mood == AvatarMood.CALM ||
+            reaction == AvatarReaction.CELEBRATE || reaction == AvatarReaction.CUDDLE || mood == AvatarMood.CALM ||
             mood == AvatarMood.SLEEPY || mood == AvatarMood.EXCITED
         for (x in listOf(76f,124f)) {
             if (softEyes) {
@@ -125,6 +161,10 @@ class MomoRenderer {
         if (reaction == AvatarReaction.WAVE) {
             canvas.drawOval(30f,112f - wiggle * 5f,53f,143f - wiggle * 5f,paint)
             canvas.drawOval(136f,143f,160f,165f,paint)
+        } else if (reaction == AvatarReaction.CUDDLE) {
+            // Both paws fold inward to offer a hug.
+            canvas.drawOval(66f, 139f, 92f, 158f, paint)
+            canvas.drawOval(108f, 139f, 134f, 158f, paint)
         } else {
             canvas.drawOval(40f,143f,64f,165f,paint)
             canvas.drawOval(136f,143f,160f,165f,paint)
@@ -155,6 +195,21 @@ class MomoRenderer {
                 canvas.drawRoundRect(66f,141f,134f,151f,5f,5f,paint)
                 canvas.drawRoundRect(116f,147f,127f,166f,4f,4f,paint)
             }
+            AvatarAccessory.CROWN -> {
+                fill(Color.rgb(255, 202, 73))
+                path.reset(); path.moveTo(69f,74f); path.lineTo(69f,52f)
+                path.lineTo(84f,63f); path.lineTo(101f,42f); path.lineTo(117f,63f)
+                path.lineTo(133f,52f); path.lineTo(133f,74f); path.close()
+                canvas.drawPath(path,paint)
+                fill(Color.rgb(255, 127, 172)); canvas.drawCircle(101f,62f,5f,paint)
+            }
+            AvatarAccessory.HEADPHONES -> {
+                line(Color.rgb(120, 105, 191), 5f)
+                canvas.drawArc(60f,65f,140f,147f,188f,164f,false,paint)
+                fill(Color.rgb(120, 105, 191))
+                canvas.drawRoundRect(52f,100f,65f,129f,6f,6f,paint)
+                canvas.drawRoundRect(135f,100f,148f,129f,6f,6f,paint)
+            }
         }
         canvas.restore()
         when(mood) {
@@ -172,6 +227,12 @@ class MomoRenderer {
                 fill(Color.rgb(255,249,240)); canvas.drawCircle(175f,44f,9f,paint)
             }
             else -> Unit
+        }
+        if (reaction == AvatarReaction.CUDDLE) {
+            fill(Color.rgb(255, 126, 171))
+            val floatUp = if (animated) (1f - burst) * 12f else 0f
+            heart(canvas, 28f, 88f - floatUp)
+            heart(canvas, 174f, 106f - floatUp)
         }
         if (reaction == AvatarReaction.BOOP || reaction == AvatarReaction.TICKLE ||
             reaction == AvatarReaction.CELEBRATE) {

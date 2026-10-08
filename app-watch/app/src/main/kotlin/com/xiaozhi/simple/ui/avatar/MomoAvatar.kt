@@ -2,6 +2,7 @@ package com.xiaozhi.simple.ui.avatar
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -23,7 +24,8 @@ fun MomoAvatar(
     reaction: AvatarReaction = AvatarReaction.NONE,
     reactionTick: Int = 0,
     style: AvatarStyle = AvatarStyle(),
-    onTouch: (AvatarPart) -> Unit = {}
+    onTouch: (AvatarPart) -> Unit = {},
+    onCuddle: () -> Unit = {}
 ) {
     val renderer = remember { MomoRenderer() }
     var seconds by remember { mutableFloatStateOf(0f) }
@@ -40,12 +42,33 @@ fun MomoAvatar(
     }
     Canvas(
         modifier
-            .semantics { contentDescription = "Momo, ${mood.name.lowercase()}. Tap to pet or play." }
-            .pointerInput(onTouch) {
-                detectTapGestures { offset ->
-                    AvatarTouch.locate(offset.x, offset.y, size.width.toFloat(), size.height.toFloat())
-                        ?.let(onTouch)
-                }
+            .semantics { contentDescription = "Momo, ${mood.name.lowercase()}. Tap to play, hold or swipe to cuddle." }
+            .pointerInput(onTouch, onCuddle) {
+                detectTapGestures(
+                    onLongPress = { offset ->
+                        if (AvatarTouch.locate(offset.x, offset.y,
+                                size.width.toFloat(), size.height.toFloat()) != null) onCuddle()
+                    },
+                    onTap = { offset ->
+                        AvatarTouch.locate(offset.x, offset.y,
+                            size.width.toFloat(), size.height.toFloat())?.let(onTouch)
+                    }
+                )
+            }
+            .pointerInput(onCuddle) {
+                var startedOnMomo = false
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        startedOnMomo = AvatarTouch.locate(offset.x, offset.y,
+                            size.width.toFloat(), size.height.toFloat()) != null
+                    },
+                    onDragEnd = {
+                        if (startedOnMomo) onCuddle()
+                        startedOnMomo = false
+                    },
+                    onDragCancel = { startedOnMomo = false },
+                    onDrag = { change, _ -> change.consume() }
+                )
             }
     ) {
         drawIntoCanvas {

@@ -11,7 +11,7 @@ enum class AvatarReaction(val caption: String) {
     NONE(""), PAT("Aww, more head pats!"), WIGGLE("Hey! My ears are ticklish!"),
     BOOP("Boop! Honk honk!"), TICKLE("Heehee! That tickles!"),
     DANCE("Look at my happy feet!"), WAVE("High five, friend!"),
-    CELEBRATE("Woohoo! We did it!")
+    CELEBRATE("Woohoo! We did it!"), CUDDLE("Bunny hugs and happy hearts!")
 }
 
 enum class AvatarOutfit(val label: String, val color: Int) {
@@ -19,11 +19,14 @@ enum class AvatarOutfit(val label: String, val color: Int) {
     STRAWBERRY("Strawberry", Color.rgb(255, 139, 170)),
     SKY("Sky blue", Color.rgb(123, 194, 242)),
     SUNNY("Sunshine", Color.rgb(255, 208, 104)),
-    LAVENDER("Lavender", Color.rgb(186, 159, 239))
+    LAVENDER("Lavender", Color.rgb(186, 159, 239)),
+    PAJAMAS("Moon pajamas", Color.rgb(142, 175, 237)),
+    HERO("Super Momo", Color.rgb(106, 211, 170))
 }
 
 enum class AvatarAccessory(val label: String) {
-    NONE("None"), BOW("Bow"), HAT("Party hat"), GLASSES("Silly glasses"), SCARF("Scarf")
+    NONE("None"), BOW("Bow"), HAT("Party hat"), GLASSES("Silly glasses"),
+    SCARF("Scarf"), CROWN("Crown"), HEADPHONES("Headphones")
 }
 
 data class AvatarStyle(
@@ -57,13 +60,16 @@ object AvatarTouch {
     }
 }
 
-/** Two offline mini-games. No user data or audio is sent to the server. */
+/** Three offline mini-games. No user data or audio is sent to the server. */
 enum class AvatarGame(val title: String) {
-    NONE("Free play"), MOMO_SAYS("Momo Says"), TICKLE_RACE("Tickle Race")
+    NONE("Free play"), MOMO_SAYS("Momo Says"), TICKLE_RACE("Tickle Race"),
+    DANCE_PARTY("Dance Party")
 }
 
 object AvatarGames {
     val targets = listOf(AvatarPart.HEAD, AvatarPart.NOSE, AvatarPart.EARS,
         AvatarPart.BELLY, AvatarPart.FEET)
+    val danceSteps = listOf(AvatarPart.FEET, AvatarPart.HANDS, AvatarPart.FEET,
+        AvatarPart.HEAD, AvatarPart.HANDS, AvatarPart.FEET)
     const val TICKLE_GOAL = 8
 }
