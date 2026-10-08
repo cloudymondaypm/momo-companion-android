@@ -25,9 +25,14 @@ fun MomoAvatar(
     reactionTick: Int = 0,
     style: AvatarStyle = AvatarStyle(),
     onTouch: (AvatarPart) -> Unit = {},
+    onPet: (AvatarPart) -> Unit = {},
     onCuddle: () -> Unit = {}
 ) {
     val renderer = remember { MomoRenderer() }
+    // Avoid cancelling ongoing gestures during avatar recompositions.
+    val currentTouch by rememberUpdatedState(onTouch)
+    val currentPet by rememberUpdatedState(onPet)
+    val currentCuddle by rememberUpdatedState(onCuddle)
     var seconds by remember { mutableFloatStateOf(0f) }
     // Each tap restarts its animation, even if the same body part is tapped twice.
     LaunchedEffect(animated, reactionTick) {
@@ -42,31 +47,31 @@ fun MomoAvatar(
     }
     Canvas(
         modifier
-            .semantics { contentDescription = "Momo, ${mood.name.lowercase()}. Tap to play, hold or swipe to cuddle." }
-            .pointerInput(onTouch, onCuddle) {
+            .semantics { contentDescription = "Momo, ${mood.name.lowercase()}. Tap to play, swipe to pet, hold to cuddle." }
+            .pointerInput(Unit) {
                 detectTapGestures(
                     onLongPress = { offset ->
                         if (AvatarTouch.locate(offset.x, offset.y,
-                                size.width.toFloat(), size.height.toFloat()) != null) onCuddle()
+                                size.width.toFloat(), size.height.toFloat()) != null) currentCuddle()
                     },
                     onTap = { offset ->
                         AvatarTouch.locate(offset.x, offset.y,
-                            size.width.toFloat(), size.height.toFloat())?.let(onTouch)
+                            size.width.toFloat(), size.height.toFloat())?.let(currentTouch)
                     }
                 )
             }
-            .pointerInput(onCuddle) {
-                var startedOnMomo = false
+            .pointerInput(Unit) {
+                var petPart: AvatarPart? = null
                 detectDragGestures(
                     onDragStart = { offset ->
-                        startedOnMomo = AvatarTouch.locate(offset.x, offset.y,
-                            size.width.toFloat(), size.height.toFloat()) != null
+                        petPart = AvatarTouch.locate(offset.x, offset.y,
+                            size.width.toFloat(), size.height.toFloat())
                     },
                     onDragEnd = {
-                        if (startedOnMomo) onCuddle()
-                        startedOnMomo = false
+                        petPart?.let(currentPet)
+                        petPart = null
                     },
-                    onDragCancel = { startedOnMomo = false },
+                    onDragCancel = { petPart = null },
                     onDrag = { change, _ -> change.consume() }
                 )
             }

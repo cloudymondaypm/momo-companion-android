@@ -50,6 +50,16 @@ object AvatarTouch {
         return AvatarPart.HEAD
     }
 
+    /** Petting feedback does not count as a mini-game tap. */
+    fun strokeCaption(part: AvatarPart): String = when (part) {
+        AvatarPart.HEAD -> "Purrr... gentle head pats!"
+        AvatarPart.EARS -> "Heehee! Soft ear scratches!"
+        AvatarPart.NOSE -> "A nose nuzzle! Boop!"
+        AvatarPart.BELLY -> "More belly rubs, please!"
+        AvatarPart.FEET -> "Ooh, a tiny foot massage!"
+        AvatarPart.HANDS -> "You're holding my paw!"
+    }
+
     fun reaction(part: AvatarPart): AvatarReaction = when (part) {
         AvatarPart.HEAD -> AvatarReaction.PAT
         AvatarPart.EARS -> AvatarReaction.WIGGLE
