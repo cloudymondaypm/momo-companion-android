@@ -97,23 +97,25 @@ fun MainScreen(model: MainViewModel) {
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
                 }
-                val talk: @Composable (Modifier) -> Unit = { modifier ->
-                    TalkPanel(modifier, label, accent, recording, connected, short,
+                if (wide) {
+                    Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        TalkPanel(Modifier.weight(0.48f).fillMaxHeight(), label, accent, recording, connected, short,
                         mic.status.isGranted, state == DeviceState.SPEAKING, mood, config.animateAvatar, wide,
                         config.depthGraphics, showSettings, onPlayDialog = { playDialog = it },
                         onStart = { if (mic.status.isGranted) model.beginPtt() else mic.launchPermissionRequest() },
                         onEnd = { model.endPtt("touch") }, onStop = { model.stopReply() },
                         onConnect = { model.connectToPresetServer() }, requestPermission = { mic.launchPermissionRequest() })
-                }
-                if (wide) {
-                    Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        talk(Modifier.weight(0.48f).fillMaxHeight())
                         Conversation(messages, model::clearMessages, Modifier.weight(0.52f).fillMaxHeight())
                     }
                 } else {
                     // Keep the editor outside this scrolling area so IME resize cannot hide it.
                     Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
-                        talk(Modifier.fillMaxWidth())
+                        TalkPanel(Modifier.fillMaxWidth(), label, accent, recording, connected, short,
+                        mic.status.isGranted, state == DeviceState.SPEAKING, mood, config.animateAvatar, wide,
+                        config.depthGraphics, showSettings, onPlayDialog = { playDialog = it },
+                        onStart = { if (mic.status.isGranted) model.beginPtt() else mic.launchPermissionRequest() },
+                        onEnd = { model.endPtt("touch") }, onStop = { model.stopReply() },
+                        onConnect = { model.connectToPresetServer() }, requestPermission = { mic.launchPermissionRequest() })
                         Spacer(Modifier.height(16.dp))
                         Conversation(messages, model::clearMessages, Modifier.height(240.dp).fillMaxWidth())
                     }

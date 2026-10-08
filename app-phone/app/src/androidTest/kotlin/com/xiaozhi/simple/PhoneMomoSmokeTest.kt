@@ -95,11 +95,11 @@ class PhoneMomoSmokeTest {
             }
             assertTrue(device.wait(Until.hasObject(By.text("Dress")),5000))
             compose.onNodeWithText("Dress").performScrollTo().performClick()
-            assertTrue(device.wait(Until.hasObject(By.text("Momo's wardrobe")),5000))
+            compose.onNodeWithText("Momo's wardrobe").assertIsDisplayed()
             device.pressBack()
             assertTrue(device.wait(Until.hasObject(By.text("Play")),5000))
             compose.onNodeWithText("Play").performScrollTo().performClick()
-            assertTrue(device.wait(Until.hasObject(By.text("Play Momo Says")),5000))
+            compose.onNodeWithText("Play Momo Says").assertIsDisplayed()
             compose.onNodeWithText("Play Momo Says").performClick()
             assertTrue(device.wait(Until.hasObject(By.text("Stop")),5000))
             compose.onNodeWithText("Stop").performScrollTo().performClick()

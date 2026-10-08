@@ -227,7 +227,7 @@ private fun MomoWardrobeDialog(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                Text("Saved on this watch • works offline", fontSize = 11.sp)
+                Text("Saved on this phone • works offline", fontSize = 11.sp)
                 Text("Momo's wardrobe", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Box(Modifier.fillMaxWidth().height(118.dp), contentAlignment = Alignment.Center) {
                     MomoAvatar(
