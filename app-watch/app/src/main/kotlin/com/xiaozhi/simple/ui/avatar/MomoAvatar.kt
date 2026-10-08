@@ -21,15 +21,14 @@ fun MomoAvatar(
     animated: Boolean,
     modifier: Modifier = Modifier,
     reaction: AvatarReaction = AvatarReaction.NONE,
+    reactionTick: Int = 0,
     style: AvatarStyle = AvatarStyle(),
     onTouch: (AvatarPart) -> Unit = {}
 ) {
     val renderer = remember { MomoRenderer() }
     var seconds by remember { mutableFloatStateOf(0f) }
-    // Restart the gesture movement when a new reaction is requested.
-    var reactionId by remember { mutableIntStateOf(0) }
-    LaunchedEffect(reaction) { reactionId++ }
-    LaunchedEffect(animated, reactionId) {
+    // Each tap restarts its animation, even if the same body part is tapped twice.
+    LaunchedEffect(animated, reactionTick) {
         seconds = 0f
         if (animated) {
             val start = android.os.SystemClock.elapsedRealtime()
