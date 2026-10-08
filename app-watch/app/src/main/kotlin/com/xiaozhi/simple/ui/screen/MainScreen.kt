@@ -286,6 +286,20 @@ fun MainScreen(viewModel: MainViewModel) {
                 },
                 color = Color(0xFF56656D), fontSize = if (compact) 10.sp else 12.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (game != AvatarGame.NONE) {
+                val totalSteps = when (game) {
+                    AvatarGame.MOMO_SAYS -> momoSequence.size
+                    AvatarGame.TICKLE_RACE -> AvatarGames.TICKLE_GOAL
+                    AvatarGame.DANCE_PARTY -> AvatarGames.danceSteps.size
+                    AvatarGame.NONE -> 1
+                }
+                LinearProgressIndicator(
+                    progress = { (gameProgress.toFloat() / totalSteps.coerceAtLeast(1)).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(0.78f).height(3.dp),
+                    color = Color(0xFF7756A6),
+                    trackColor = Color(0xFFEADCF5)
+                )
+            }
             Spacer(Modifier.height(3.dp))
 
             // Dedicated press-and-hold microphone. Tapping Momo never records audio.
@@ -300,10 +314,22 @@ fun MainScreen(viewModel: MainViewModel) {
                     contentPadding = PaddingValues(0.dp)
                 ) { Text("Dress", fontSize = if (compact) 10.sp else 12.sp) }
                 OutlinedButton(
-                    onClick = { viewModel.onPressEnd(); showGames = true },
+                    onClick = {
+                        viewModel.onPressEnd()
+                        if (game == AvatarGame.NONE) {
+                            showGames = true
+                        } else {
+                            game = AvatarGame.NONE
+                            gameProgress = 0
+                            reaction = AvatarReaction.NONE
+                            reactionMessage = "Game stopped. Let's play again!"
+                            reactionTick++
+                        }
+                    },
                     modifier = Modifier.weight(1f).height(44.dp),
                     contentPadding = PaddingValues(0.dp)
-                ) { Text("Play", fontSize = if (compact) 10.sp else 12.sp) }
+                ) { Text(if (game == AvatarGame.NONE) "Play" else "Stop",
+                    fontSize = if (compact) 10.sp else 12.sp) }
                 Box(
                     modifier = Modifier
                         .width(if (compact) 90.dp else 108.dp)

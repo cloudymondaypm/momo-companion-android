@@ -4,9 +4,9 @@ The watch avatar is now **interactive**. Petting, tapping, swiping or dressing t
 
 ## Controls
 
-- **Pet Momo**: tap ears, nose, head, belly, hands, or feet for distinct gestures. Swipe a body part to pet Momo without advancing the current game. Long-press the avatar for a bunny cuddle and floating hearts.
+- **Pet Momo**: tap ears, nose, head, belly, hands, or feet for distinct gestures. Body-shaped touch zones reject taps in the empty background. Swipe a body part to pet Momo without advancing the current game. Long-press the avatar for a bunny cuddle and floating hearts.
 - **Dress**: choose Classic, Strawberry, Sky Blue, Sunshine, Lavender, Moon Pajamas, or Super Momo clothing, plus a bow, party hat, silly glasses, scarf, crown, or headphones. A live preview shows the selected look before closing. The cape and pajama patterns are drawn as lightweight vector art. Choices are saved locally across restarts.
-- **Play**: select one of three offline games. Momo keeps the next prompt visible during reactions and awards one locally saved star each time you finish a game:
+- **Play**: select one of three offline games. Momo keeps the next prompt and a small progress bar visible during reactions. The Play button becomes **Stop** during a game. A completed game awards one locally saved star:
   - **Momo Says** — follow a freshly shuffled sequence of five body-part prompts each round.
   - **Tickle Race** — find and tickle Momo's belly eight times.
   - **Dance Party** — follow six tap-to-the-beat body-part prompts to make Momo dance.
