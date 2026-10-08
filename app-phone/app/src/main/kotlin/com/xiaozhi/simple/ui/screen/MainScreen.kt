@@ -193,6 +193,7 @@ private fun TalkPanel(modifier: Modifier, label: String, accent: Color, recordin
 @Composable
 private fun TypedComposer(connected: Boolean, onSend: (String) -> Boolean) {
     var draft by rememberSaveable { mutableStateOf("") }
+    val display = LocalWatchDisplay.current
     val canSend = connected && TypedChat.valid(draft)
     val send = { if (canSend && onSend(draft)) draft = "" }
     Row(Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -200,7 +201,7 @@ private fun TypedComposer(connected: Boolean, onSend: (String) -> Boolean) {
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(
             value = draft,
-            onValueChange = { if (it.length <= TypedChat.MAX_LENGTH) draft = it },
+            onValueChange = { display.interact(); if (it.length <= TypedChat.MAX_LENGTH) draft = it },
             modifier = Modifier.weight(1f),
             label = { Text("Type to Momo") },
             placeholder = { Text("Write a message…") },
@@ -287,16 +288,16 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                 }
                 Text("Timeout saves immediately.", style = MaterialTheme.typography.bodySmall)
                 HorizontalDivider()
-                OutlinedTextField(server, { server = it }, Modifier.fillMaxWidth(), label = { Text("WebSocket server") }, singleLine = true)
-                OutlinedTextField(ota, { ota = it }, Modifier.fillMaxWidth(), label = { Text("OTA address") }, singleLine = true,
+                OutlinedTextField(server, { display.interact(); server = it }, Modifier.fillMaxWidth(), label = { Text("WebSocket server") }, singleLine = true)
+                OutlinedTextField(ota, { display.interact(); ota = it }, Modifier.fillMaxWidth(), label = { Text("OTA address") }, singleLine = true,
                     supportingText = { Text("Optional connection setup only. No firmware downloads. Save changed addresses before requesting setup.") })
                 OutlinedButton(onClick = getSetup, enabled = !setupBusy, modifier = Modifier.fillMaxWidth()) {
                     Text(if (setupBusy) "Checking server…" else "Get server setup")
                 }
                 if (setupInfo.isNotBlank()) Text(setupInfo, style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(token, { token = it }, Modifier.fillMaxWidth(), label = { Text("Bearer token (optional)") },
+                OutlinedTextField(token, { display.interact(); token = it }, Modifier.fillMaxWidth(), label = { Text("Bearer token (optional)") },
                     singleLine = true, visualTransformation = PasswordVisualTransformation())
-                OutlinedTextField(device, { device = it }, Modifier.fillMaxWidth(), label = { Text("Device ID") }, singleLine = true,
+                OutlinedTextField(device, { display.interact(); device = it }, Modifier.fillMaxWidth(), label = { Text("Device ID") }, singleLine = true,
                     supportingText = { Text("Random app identity. Register this ID in your self-hosted dashboard if required.") })
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(auto, { auto = it }); Spacer(Modifier.width(12.dp)); Text("Connect when app opens")

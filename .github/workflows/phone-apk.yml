@@ -23,3 +23,31 @@ jobs:
       - run: chmod +x app-phone/gradlew && ./app-phone/gradlew -p app-phone assembleDebug testDebugUnitTest
       - uses: actions/upload-artifact@v4
         with: {name: momo-companion-phone-debug, path: app-phone/app/build/outputs/apk/debug/*.apk, if-no-files-found: error}
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Phone UI and 3D smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: ./app-phone/gradlew -p app-phone connectedDebugAndroidTest
+      - name: Export emulator preview
+        if: always()
+        run: |
+          mkdir -p phone-preview
+          adb exec-out run-as space.spacecloud.xiaozhi.fold5 cat files/phone-momo-depth.png > phone-preview/phone-momo-depth.png || true
+      - name: Upload phone QA evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: momo-phone-emulator-qa
+          path: |
+            phone-preview/*.png
+            app-phone/app/build/reports/androidTests/connected/**
+          if-no-files-found: warn
