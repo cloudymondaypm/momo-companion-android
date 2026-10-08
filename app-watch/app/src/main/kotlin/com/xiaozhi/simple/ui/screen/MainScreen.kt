@@ -102,6 +102,12 @@ fun MainScreen(viewModel: MainViewModel) {
     var game by remember { mutableStateOf(AvatarGame.NONE) }
     var gameProgress by remember { mutableIntStateOf(0) }
     var momoSequence by remember { mutableStateOf(AvatarGames.targets) }
+    // All rewards are on-device, offline and never tied to purchases.
+    var stars by remember { mutableIntStateOf(wardrobePrefs.getInt("game_stars", 0).coerceAtLeast(0)) }
+    val awardStar: () -> Unit = {
+        stars += 1
+        wardrobePrefs.edit().putInt("game_stars", stars).apply()
+    }
 
     // Each reaction is fleeting. Does not interfere with the voice mood or server connection.
     LaunchedEffect(reactionTick) {
@@ -123,6 +129,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     reactionMessage = "Great job!"
                     if (gameProgress >= momoSequence.size) {
                         game = AvatarGame.NONE
+                        awardStar()
                         reactionMessage = "You won Momo Says! ⭐"
                     }
                 } else reactionMessage = "Oops! Try my ${momoSequence[gameProgress].label}!"
@@ -132,6 +139,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     gameProgress++
                     if (gameProgress >= AvatarGames.TICKLE_GOAL) {
                         game = AvatarGame.NONE
+                        awardStar()
                         reaction = AvatarReaction.CELEBRATE
                         reactionMessage = "Tickle champion! 🎉"
                     } else reactionMessage = "Heehee! ${AvatarGames.TICKLE_GOAL - gameProgress} more!"
@@ -143,6 +151,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     reaction = AvatarReaction.DANCE
                     if (gameProgress >= AvatarGames.danceSteps.size) {
                         game = AvatarGame.NONE
+                        awardStar()
                         reaction = AvatarReaction.CELEBRATE
                         reactionMessage = "Dance star! You did it! 🎵"
                     } else {
@@ -152,6 +161,12 @@ fun MainScreen(viewModel: MainViewModel) {
             }
             AvatarGame.NONE -> Unit
         }
+        reactionTick++
+    }
+    val petMomo: (AvatarPart) -> Unit = { part ->
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        reaction = AvatarTouch.reaction(part)
+        reactionMessage = AvatarTouch.strokeCaption(part)
         reactionTick++
     }
     val cuddleMomo: () -> Unit = {
@@ -176,6 +191,13 @@ fun MainScreen(viewModel: MainViewModel) {
         else -> avatarMood
     }
 
+    // Keep the next step visible even while Momo giggles or celebrates.
+    val gameInstruction = when (game) {
+        AvatarGame.MOMO_SAYS -> "Momo says: ${momoSequence.getOrNull(gameProgress)?.label ?: "done"} (${gameProgress + 1}/${momoSequence.size})"
+        AvatarGame.TICKLE_RACE -> "Tickle belly: ${gameProgress}/${AvatarGames.TICKLE_GOAL}"
+        AvatarGame.DANCE_PARTY -> "Dance: ${AvatarGames.danceSteps.getOrNull(gameProgress)?.label ?: "done"} (${gameProgress + 1}/${AvatarGames.danceSteps.size})"
+        AvatarGame.NONE -> ""
+    }
     val latestText = messages.lastOrNull()?.content.orEmpty()
     val latestIsUser = messages.lastOrNull()?.type == MessageType.USER
 
@@ -230,11 +252,15 @@ fun MainScreen(viewModel: MainViewModel) {
                     )
                 }
 
-                IconButton(
-                    onClick = { viewModel.onPressEnd(); showSettings = true },
-                    modifier = Modifier.size(if (compact) 32.dp else 40.dp)
-                ) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color(0xFF75668B))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("⭐ $stars", color = Color(0xFF85622A),
+                        fontSize = if (compact) 10.sp else 12.sp)
+                    IconButton(
+                        onClick = { viewModel.onPressEnd(); showSettings = true },
+                        modifier = Modifier.size(if (compact) 32.dp else 40.dp)
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color(0xFF75668B))
+                    }
                 }
             }
 
@@ -252,20 +278,15 @@ fun MainScreen(viewModel: MainViewModel) {
                         !showGames && !config.reduceMotion,
                     reaction = reaction, reactionTick = reactionTick,
                     style = AvatarStyle(outfit, accessory),
-                    onTouch = touchMomo, onCuddle = cuddleMomo,
+                    onTouch = touchMomo, onPet = petMomo, onCuddle = cuddleMomo,
                     modifier = Modifier.fillMaxSize())
             }
             Text("Momo", color = Color(0xFF71608C), fontWeight = FontWeight.Bold,
                 fontSize = if (compact) 12.sp else 16.sp)
             Text(
                 text = when {
+                    game != AvatarGame.NONE -> gameInstruction
                     reactionMessage.isNotBlank() -> reactionMessage
-                    game == AvatarGame.MOMO_SAYS ->
-                        "Momo says: touch my ${momoSequence[gameProgress].label}!"
-                    game == AvatarGame.TICKLE_RACE ->
-                        "Tickle my belly! ${gameProgress}/${AvatarGames.TICKLE_GOAL}"
-                    game == AvatarGame.DANCE_PARTY ->
-                        "Dance! Tap my ${AvatarGames.danceSteps[gameProgress].label}!"
                     deviceState == DeviceState.SPEAKING && mood == AvatarMood.HAPPY -> "Let's chat!"
                     else -> mood.caption
                 },
@@ -322,6 +343,7 @@ fun MainScreen(viewModel: MainViewModel) {
             Text(
                 text = when {
                     keyLearning -> "Press a physical button"
+                    game != AvatarGame.NONE && reactionMessage.isNotBlank() -> reactionMessage
                     pttKeyCode == KeyEvent.KEYCODE_UNKNOWN -> "Hold 🎙 to talk • side button in ⚙"
                     deviceState == DeviceState.LISTENING -> "Release to send"
                     else -> "Hold 🎙 or side button to talk"
@@ -613,6 +635,13 @@ private fun MomoWardrobeDialog(
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
                 Text("Momo's wardrobe", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Box(Modifier.fillMaxWidth().height(118.dp), contentAlignment = Alignment.Center) {
+                    MomoAvatar(
+                        mood = AvatarMood.HAPPY, speaking = false, animated = false,
+                        style = AvatarStyle(outfit, accessory),
+                        modifier = Modifier.size(114.dp)
+                    )
+                }
                 Text("Choose an outfit", fontSize = 12.sp)
                 AvatarOutfit.entries.chunked(2).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -679,6 +708,7 @@ private fun MomoGamesDialog(
                     fontSize = 11.sp)
                 Button(onClick = { onStart(AvatarGame.TICKLE_RACE) },
                     modifier = Modifier.fillMaxWidth()) { Text("Play Tickle Race") }
+                Text("Dance Party: follow six different body-part dance steps.", fontSize = 11.sp)
                 Button(onClick = { onStart(AvatarGame.DANCE_PARTY) },
                     modifier = Modifier.fillMaxWidth()) { Text("Play Dance Party") }
                 if (activeGame != AvatarGame.NONE) {
