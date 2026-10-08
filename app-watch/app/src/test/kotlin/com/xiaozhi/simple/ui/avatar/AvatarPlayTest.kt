@@ -34,6 +34,31 @@ class AvatarPlayTest {
         assertNull(AvatarTouch.locate(20f, 100f, 300f, 200f))
     }
 
+    @Test fun playfulInteractionsHaveDistinctReactionsAndDanceSequence() {
+        assertEquals(6, AvatarPart.entries.size)
+        assertEquals(6, AvatarPart.entries.map { AvatarTouch.reaction(it) }.toSet().size)
+        assertEquals(6, AvatarGames.danceSteps.size)
+        assertEquals(AvatarPart.FEET, AvatarGames.danceSteps.first())
+        assertEquals(AvatarPart.FEET, AvatarGames.danceSteps.last())
+        assertTrue(AvatarGames.danceSteps.contains(AvatarPart.HANDS))
+        assertEquals(7, AvatarOutfit.entries.size)
+        assertEquals(7, AvatarAccessory.entries.size)
+        assertEquals(4, AvatarGame.entries.size)
+    }
+
+    @Test fun newCuddleReactionRenders() {
+        val renderer = MomoRenderer()
+        val baseline = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)
+        renderer.draw(Canvas(baseline), 200f, 200f, AvatarMood.HAPPY, 0f,
+            false, false)
+        val cuddle = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)
+        renderer.draw(Canvas(cuddle), 200f, 200f, AvatarMood.HAPPY, 0f,
+            false, false, AvatarReaction.CUDDLE)
+        assertFalse("Cuddling should change the face, arms and hearts", baseline.sameAs(cuddle))
+        baseline.recycle()
+        cuddle.recycle()
+    }
+
     @Test fun everyOutfitAndAccessoryRendersAndReducedMotionIsStable() {
         val renderer = MomoRenderer()
         val plain = Bitmap.createBitmap(200, 200, Bitmap.Config.ARGB_8888)

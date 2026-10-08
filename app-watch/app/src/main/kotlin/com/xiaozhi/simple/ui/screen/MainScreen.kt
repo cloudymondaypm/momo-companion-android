@@ -101,6 +101,7 @@ fun MainScreen(viewModel: MainViewModel) {
     var reactionMessage by remember { mutableStateOf("") }
     var game by remember { mutableStateOf(AvatarGame.NONE) }
     var gameProgress by remember { mutableIntStateOf(0) }
+    var momoSequence by remember { mutableStateOf(AvatarGames.targets) }
 
     // Each reaction is fleeting. Does not interfere with the voice mood or server connection.
     LaunchedEffect(reactionTick) {
@@ -116,15 +117,15 @@ fun MainScreen(viewModel: MainViewModel) {
         reactionMessage = reaction.caption
         when (game) {
             AvatarGame.MOMO_SAYS -> {
-                if (part == AvatarGames.targets.getOrNull(gameProgress)) {
+                if (part == momoSequence.getOrNull(gameProgress)) {
                     gameProgress++
                     reaction = AvatarReaction.CELEBRATE
                     reactionMessage = "Great job!"
-                    if (gameProgress >= AvatarGames.targets.size) {
+                    if (gameProgress >= momoSequence.size) {
                         game = AvatarGame.NONE
                         reactionMessage = "You won Momo Says! ⭐"
                     }
-                } else reactionMessage = "Oops! Try my ${AvatarGames.targets[gameProgress].label}!"
+                } else reactionMessage = "Oops! Try my ${momoSequence[gameProgress].label}!"
             }
             AvatarGame.TICKLE_RACE -> {
                 if (part == AvatarPart.BELLY) {
@@ -136,8 +137,27 @@ fun MainScreen(viewModel: MainViewModel) {
                     } else reactionMessage = "Heehee! ${AvatarGames.TICKLE_GOAL - gameProgress} more!"
                 } else reactionMessage = "Find my belly! 😆"
             }
+            AvatarGame.DANCE_PARTY -> {
+                if (part == AvatarGames.danceSteps.getOrNull(gameProgress)) {
+                    gameProgress++
+                    reaction = AvatarReaction.DANCE
+                    if (gameProgress >= AvatarGames.danceSteps.size) {
+                        game = AvatarGame.NONE
+                        reaction = AvatarReaction.CELEBRATE
+                        reactionMessage = "Dance star! You did it! 🎵"
+                    } else {
+                        reactionMessage = "Nice move! Next: ${AvatarGames.danceSteps[gameProgress].label}!"
+                    }
+                } else reactionMessage = "Next move: ${AvatarGames.danceSteps[gameProgress].label}!"
+            }
             AvatarGame.NONE -> Unit
         }
+        reactionTick++
+    }
+    val cuddleMomo: () -> Unit = {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        reaction = AvatarReaction.CUDDLE
+        reactionMessage = AvatarReaction.CUDDLE.caption
         reactionTick++
     }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -232,7 +252,8 @@ fun MainScreen(viewModel: MainViewModel) {
                         !showGames && !config.reduceMotion,
                     reaction = reaction, reactionTick = reactionTick,
                     style = AvatarStyle(outfit, accessory),
-                    onTouch = touchMomo, modifier = Modifier.fillMaxSize())
+                    onTouch = touchMomo, onCuddle = cuddleMomo,
+                    modifier = Modifier.fillMaxSize())
             }
             Text("Momo", color = Color(0xFF71608C), fontWeight = FontWeight.Bold,
                 fontSize = if (compact) 12.sp else 16.sp)
@@ -240,9 +261,11 @@ fun MainScreen(viewModel: MainViewModel) {
                 text = when {
                     reactionMessage.isNotBlank() -> reactionMessage
                     game == AvatarGame.MOMO_SAYS ->
-                        "Momo says: touch my ${AvatarGames.targets[gameProgress].label}!"
+                        "Momo says: touch my ${momoSequence[gameProgress].label}!"
                     game == AvatarGame.TICKLE_RACE ->
                         "Tickle my belly! ${gameProgress}/${AvatarGames.TICKLE_GOAL}"
+                    game == AvatarGame.DANCE_PARTY ->
+                        "Dance! Tap my ${AvatarGames.danceSteps[gameProgress].label}!"
                     deviceState == DeviceState.SPEAKING && mood == AvatarMood.HAPPY -> "Let's chat!"
                     else -> mood.caption
                 },
@@ -346,9 +369,14 @@ fun MainScreen(viewModel: MainViewModel) {
             onStart = {
                 game = it
                 gameProgress = 0
+                if (it == AvatarGame.MOMO_SAYS) momoSequence = AvatarGames.targets.shuffled()
                 reaction = AvatarReaction.CELEBRATE
-                reactionMessage = if (it == AvatarGame.MOMO_SAYS)
-                    "Momo says: touch my head!" else "Tickle my belly 8 times!"
+                reactionMessage = when (it) {
+                    AvatarGame.MOMO_SAYS -> "Momo says: touch my ${momoSequence.first().label}!"
+                    AvatarGame.TICKLE_RACE -> "Tickle my belly 8 times!"
+                    AvatarGame.DANCE_PARTY -> "Dance! Tap my ${AvatarGames.danceSteps.first().label}!"
+                    AvatarGame.NONE -> ""
+                }
                 reactionTick++
                 showGames = false
             },
@@ -651,6 +679,8 @@ private fun MomoGamesDialog(
                     fontSize = 11.sp)
                 Button(onClick = { onStart(AvatarGame.TICKLE_RACE) },
                     modifier = Modifier.fillMaxWidth()) { Text("Play Tickle Race") }
+                Button(onClick = { onStart(AvatarGame.DANCE_PARTY) },
+                    modifier = Modifier.fillMaxWidth()) { Text("Play Dance Party") }
                 if (activeGame != AvatarGame.NONE) {
                     OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
                         Text("Stop game")

@@ -2,7 +2,7 @@
 
 Momo Companion is a small-screen Xiaozhi Android client for the Kiumo ZH23-YL-RF watch, with a pettable, dressable mint bunny and a dedicated hold-to-talk button.
 
-Version: **0.3.0-momo-companion** (version code 15). Package: `com.kiumo.xiaozhi`.
+Version: **0.4.0-momo-companion** (version code 16). Package: `com.kiumo.xiaozhi`.
 
 ![Momo expressions](docs/Momo-Expressions.png)
 
@@ -12,9 +12,9 @@ Version: **0.3.0-momo-companion** (version code 15). Package: `com.kiumo.xiaozhi
 - Lightweight native vector avatar: blinking, gentle movement, celebrations, and an animated talking mouth.
 - Happy, excited, curious, caring, calm, listening, thinking, and sleepy expressions.
 - Server emotion messages plus local conversation-text cues; no extra AI service for avatar mood.
-- Touch Momo's ears, head, nose, hands, belly or feet for funny gestures and reactions.
-- Five outfits and five accessory choices (including none), saved locally.
-- Two offline games: **Momo Says** and **Tickle Race**.
+- Touch Momo's ears, head, nose, hands, belly or feet for funny gestures; long-press or swipe for cuddles with floating hearts.
+- Seven outfits (including pajamas and superhero cape) and seven accessory choices (including none), saved locally.
+- Three offline games: **Momo Says** (shuffled), **Tickle Race**, and **Dance Party**.
 - Dedicated on-screen **Talk** button (hold to record, release to send); tapping Momo never starts voice recording.
 - Physical-button push-to-talk with learn/mapping mode remains supported.
 - Microphone opens only while PTT is held and stops on release, cancellation, pause, focus loss, or connection loss.
@@ -90,6 +90,6 @@ Then follow your new GitHub repository's instructions to add its remote and push
 
 ## Verification and credits
 
-The earlier Momo APK passed build/signature verification and tests. Version 0.3.0 adds touch-zone and outfit rendering tests; run the watch CI workflow to validate the new version. Physical watch testing remains necessary.
+The earlier Momo APK passed build/signature verification and tests. Version 0.4.0 adds cuddle gestures, more expressive reactions, new outfits/accessories, Dance Party, and avatar tests. Run watch CI and test gestures on physical hardware. Physical watch testing remains necessary.
 
 Adapted from [jerrygugu/xiaozhi-android](https://github.com/jerrygugu/xiaozhi-android), commit `e2a026401247f8313262d8fc1e7400dd53fb8e4d`, under the MIT license. Bundled [Opus 1.5.2](https://github.com/xiph/opus/tree/v1.5.2), commit `ddbe48383984d56acd9e1ab6a090c54ca6b735a6`, retains its BSD license and notices. Momo artwork and watch adaptations were added for this build. See [third-party notices](THIRD_PARTY_NOTICES.md).
