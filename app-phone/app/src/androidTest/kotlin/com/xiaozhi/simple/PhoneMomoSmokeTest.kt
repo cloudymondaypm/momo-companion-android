@@ -15,7 +15,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
-import androidx.test.uiautomator.StaleObjectException
 import com.xiaozhi.simple.ui.avatar.MomoDepthView
 import org.junit.Assert.*
 import org.junit.Test
@@ -23,6 +22,11 @@ import org.junit.Rule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.assertIsDisplayed
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -90,33 +94,20 @@ class PhoneMomoSmokeTest {
                 shot.recycle()
             }
             assertTrue(device.wait(Until.hasObject(By.text("Dress")),5000))
-            device.findObject(By.text("Dress")).click()
+            compose.onNodeWithText("Dress").performScrollTo().performClick()
             assertTrue(device.wait(Until.hasObject(By.text("Momo's wardrobe")),5000))
             device.pressBack()
             assertTrue(device.wait(Until.hasObject(By.text("Play")),5000))
-            device.findObject(By.text("Play")).click()
+            compose.onNodeWithText("Play").performScrollTo().performClick()
             assertTrue(device.wait(Until.hasObject(By.text("Play Momo Says")),5000))
-            device.findObject(By.text("Play Momo Says")).click()
+            compose.onNodeWithText("Play Momo Says").performClick()
             assertTrue(device.wait(Until.hasObject(By.text("Stop")),5000))
-            device.findObject(By.text("Stop")).click()
-            val composer = device.wait(Until.findObject(By.clazz("android.widget.EditText")),5000)
-            assertNotNull("Typed chat editor must be available offline",composer)
-            composer.click() // Exercise the real keyboard and compact layout.
+            compose.onNodeWithText("Stop").performScrollTo().performClick()
+            // Compose resolves current nodes after IME resize instead of retaining stale handles.
+            compose.onNode(hasSetTextAction()).assertIsDisplayed().performClick()
             device.waitForIdle()
-            // Keyboard resize replaces Compose accessibility nodes; reacquire after layout.
-            var entered = false
-            repeat(10) {
-                if (!entered) {
-                    try {
-                        val editor = device.wait(Until.findObject(By.clazz("android.widget.EditText")),2000)
-                        if (editor != null) { editor.text = "Hello Momo"; entered = true }
-                    } catch (_: StaleObjectException) { /* Next attempt gets the current node. */ }
-                    if (!entered) Thread.sleep(200)
-                }
-            }
-            assertTrue("Keyboard editor should accept a draft",entered)
-            assertTrue("Draft must stay visible with keyboard open",
-                device.wait(Until.hasObject(By.text("Hello Momo")),5000))
+            compose.onNode(hasSetTextAction()).performTextInput("Hello Momo")
+            compose.onNodeWithText("Hello Momo").assertIsDisplayed()
             val sendButton = device.findObject(By.desc("Send typed message"))
             assertNotNull("Accessible Send button must be present",sendButton)
             compose.onNodeWithText("Send").assertIsNotEnabled()
