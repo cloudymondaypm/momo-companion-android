@@ -4,9 +4,9 @@ The watch avatar is now **interactive**. Petting, tapping, swiping or dressing t
 
 ## Controls
 
-- **Pet Momo**: tap ears, nose, head, belly, hands, or feet for distinct gestures. Hold or swipe across Momo for a big bunny cuddle and floating hearts.
-- **Dress**: choose Classic, Strawberry, Sky Blue, Sunshine, Lavender, Moon Pajamas, or Super Momo clothing, plus a bow, party hat, silly glasses, scarf, crown, or headphones. The cape and pajama patterns are drawn as lightweight vector art. Choices are saved locally across restarts.
-- **Play**: select one of three offline games:
+- **Pet Momo**: tap ears, nose, head, belly, hands, or feet for distinct gestures. Swipe a body part to pet Momo without advancing the current game. Long-press the avatar for a bunny cuddle and floating hearts.
+- **Dress**: choose Classic, Strawberry, Sky Blue, Sunshine, Lavender, Moon Pajamas, or Super Momo clothing, plus a bow, party hat, silly glasses, scarf, crown, or headphones. A live preview shows the selected look before closing. The cape and pajama patterns are drawn as lightweight vector art. Choices are saved locally across restarts.
+- **Play**: select one of three offline games. Momo keeps the next prompt visible during reactions and awards one locally saved star each time you finish a game:
   - **Momo Says** — follow a freshly shuffled sequence of five body-part prompts each round.
   - **Tickle Race** — find and tickle Momo's belly eight times.
   - **Dance Party** — follow six tap-to-the-beat body-part prompts to make Momo dance.
@@ -23,4 +23,4 @@ Designed for the Kiumo ZH23-YL-RF running Android 8.1/API 26. The avatar remains
 
 `./gradlew -p app-watch assembleDebug testDebugUnitTest`
 
-Manual watch check: verify tap vs long-press vs swipe on the small screen, nose vs head hit boxes, no false microphone activation, reliable PTT release (including finger sliding off), all new outfit/accessory rendering, and scrollable pickers. The buttons are intentionally separate to avoid accidental audio capture. The APK must still be built and tested on hardware.
+Manual watch check: verify taps vs long-press vs body-specific swipe on the small screen, nose vs head hit boxes, swipes not counting as game taps, no false microphone activation, reliable PTT release (including finger sliding off), saved stars and live outfit preview, all new outfit/accessory rendering, and scrollable pickers. The buttons are intentionally separate to avoid accidental audio capture. The APK must still be built and tested on hardware.

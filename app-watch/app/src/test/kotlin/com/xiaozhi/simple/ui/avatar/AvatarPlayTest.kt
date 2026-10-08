@@ -34,6 +34,14 @@ class AvatarPlayTest {
         assertNull(AvatarTouch.locate(20f, 100f, 300f, 200f))
     }
 
+    @Test fun swipePettingHasUniqueFeedbackForEveryPart() {
+        val messages = AvatarPart.entries.map { AvatarTouch.strokeCaption(it) }
+        assertEquals(6, messages.size)
+        assertEquals(6, messages.toSet().size)
+        assertTrue(messages.all { it.isNotBlank() })
+        assertEquals(AvatarReaction.TICKLE, AvatarTouch.reaction(AvatarPart.BELLY))
+    }
+
     @Test fun playfulInteractionsHaveDistinctReactionsAndDanceSequence() {
         assertEquals(6, AvatarPart.entries.size)
         assertEquals(6, AvatarPart.entries.map { AvatarTouch.reaction(it) }.toSet().size)
