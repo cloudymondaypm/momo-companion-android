@@ -79,7 +79,7 @@ fun MainScreen(model: MainViewModel) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(horizontal = 20.dp)) {
             val wide = maxWidth >= 560.dp
             val short = maxHeight < 520.dp
-            Column(Modifier.fillMaxSize().then(if (!wide && short) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
+            Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween) {
@@ -111,9 +111,12 @@ fun MainScreen(model: MainViewModel) {
                         Conversation(messages, model::clearMessages, Modifier.weight(0.52f).fillMaxHeight())
                     }
                 } else {
-                    talk(Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(16.dp))
-                    Conversation(messages, model::clearMessages, (if (short) Modifier.height(240.dp) else Modifier.weight(1f)).fillMaxWidth())
+                    // Keep the editor outside this scrolling area so IME resize cannot hide it.
+                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                        talk(Modifier.fillMaxWidth())
+                        Spacer(Modifier.height(16.dp))
+                        Conversation(messages, model::clearMessages, Modifier.height(240.dp).fillMaxWidth())
+                    }
                 }
                 TypedComposer(connected && !recording && !showSettings && !playDialog,
                     onSend = model::sendText)
