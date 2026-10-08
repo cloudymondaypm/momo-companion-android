@@ -15,6 +15,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import androidx.test.uiautomator.StaleObjectException
 import com.xiaozhi.simple.ui.avatar.MomoDepthView
 import org.junit.Assert.*
 import org.junit.Test
@@ -67,6 +68,11 @@ class PhoneMomoSmokeTest {
             assertTrue("GL output must contain the mint character",mintPixels>100)
             bitmap.recycle()
             instrumentation.uiAutomation.takeScreenshot()?.let { shot ->
+                val caption = device.wait(Until.findObject(By.textContains("Hi!")),5000)!!
+                val bounds = caption.visibleBounds
+                val background = shot.getPixel((bounds.left - 3).coerceAtLeast(0),bounds.centerY())
+                assertTrue("3D surface must preserve the light card and readable captions",
+                    Color.red(background)>100 && Color.green(background)>100)
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME,"phone-momo-depth.png")
                     put(MediaStore.Images.Media.MIME_TYPE,"image/png")
@@ -92,7 +98,18 @@ class PhoneMomoSmokeTest {
             assertNotNull("Typed chat editor must be available offline",composer)
             composer.click() // Exercise the real keyboard and compact layout.
             device.waitForIdle()
-            device.findObject(By.clazz("android.widget.EditText")).text = "Hello Momo"
+            // Keyboard resize replaces Compose accessibility nodes; reacquire after layout.
+            var entered = false
+            repeat(10) {
+                if (!entered) {
+                    try {
+                        val editor = device.wait(Until.findObject(By.clazz("android.widget.EditText")),2000)
+                        if (editor != null) { editor.text = "Hello Momo"; entered = true }
+                    } catch (_: StaleObjectException) { /* Next attempt gets the current node. */ }
+                    if (!entered) Thread.sleep(200)
+                }
+            }
+            assertTrue("Keyboard editor should accept a draft",entered)
             assertTrue("Draft must stay visible with keyboard open",
                 device.wait(Until.hasObject(By.text("Hello Momo")),5000))
             val sendButton = device.findObject(By.desc("Send typed message"))

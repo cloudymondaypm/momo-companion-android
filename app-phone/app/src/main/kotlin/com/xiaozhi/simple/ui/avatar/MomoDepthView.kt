@@ -27,7 +27,8 @@ class MomoDepthView(context: Context, onFailure: () -> Unit) : GLSurfaceView(con
         setEGLContextClientVersion(2)
         setEGLConfigChooser(8,8,8,8,16,0)
         holder.setFormat(PixelFormat.TRANSLUCENT)
-        setZOrderMediaOverlay(true)
+        // Composite the translucent avatar above Compose without punching out its card.
+        setZOrderOnTop(true)
         preserveEGLContextOnPause = true
         setRenderer(painter)
         renderMode = RENDERMODE_WHEN_DIRTY
