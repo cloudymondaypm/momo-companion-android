@@ -487,6 +487,11 @@ fun MainScreen(viewModel: MainViewModel) {
             onHardwareKey = { viewModel.handleHardwareKey(it) },
             onLearnButton = { viewModel.startButtonLearning() },
             onClearButton = { viewModel.clearPttButton() },
+            onPresetConnect = {
+                viewModel.cancelButtonLearning()
+                viewModel.connectToPresetServer()
+                showSettings = false
+            },
             onReconnect = { viewModel.connect() },
             onDisconnect = { viewModel.disconnect() },
             onDismiss = {
@@ -514,6 +519,7 @@ private fun WatchSettingsDialog(
     onHardwareKey: (KeyEvent) -> Boolean,
     onLearnButton: () -> Unit,
     onClearButton: () -> Unit,
+    onPresetConnect: () -> Unit,
     onReconnect: () -> Unit,
     onDisconnect: () -> Unit,
     onDismiss: () -> Unit,
@@ -565,6 +571,15 @@ private fun WatchSettingsDialog(
                     }
                 }
 
+                Button(onClick = onPresetConnect, modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)) {
+                    Text("Connect to my server", fontSize = 12.sp)
+                }
+                Text("xiaozhi.spacecloud.space • no URL typing",
+                    style = MaterialTheme.typography.bodySmall)
+                Text("Uses saved token and pairing. Bind in your server console if asked.",
+                    style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider()
                 Text("Display auto-off", fontWeight = FontWeight.SemiBold)
                 Text("After inactivity, Momo goes dark. Android controls physical sleep.",
                     style = MaterialTheme.typography.bodySmall)

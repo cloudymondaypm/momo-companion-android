@@ -2,7 +2,7 @@
 
 Momo Companion is a small-screen Xiaozhi Android client for the Kiumo ZH23-YL-RF watch, with a pettable, dressable mint bunny and a dedicated hold-to-talk button.
 
-Version: **0.4.5-momo-companion** (version code 21). Package: `com.kiumo.xiaozhi`.
+Version: **0.4.6-momo-companion** (version code 22). Package: `com.kiumo.xiaozhi`.
 
 ![Momo expressions](docs/Momo-Expressions.png)
 
@@ -72,6 +72,8 @@ Locally, set environment variables `MOMO_WATCH_KEYSTORE_PATH`, `MOMO_WATCH_KEYST
 **Important:** A newly configured persistent key still cannot update an *older APK already signed with a different key*. Preserve the original keystore if you have one. A one-time uninstall/re-pair may be required when migrating. Keep the permanent signing key backed up securely; losing it prevents future in-place updates.
 
 ## Connect
+
+For this build, your server is prefilled. Open Settings and tap **Connect to my server** near the top: it restores both preset endpoints and connects, even if a different address was saved. Existing tokens, pairing identity, wardrobe and stars are retained. No long URL typing is required.
 
 The defaults are:
 
