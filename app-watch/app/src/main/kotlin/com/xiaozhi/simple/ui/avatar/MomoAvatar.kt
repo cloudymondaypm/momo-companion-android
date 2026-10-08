@@ -33,15 +33,17 @@ fun MomoAvatar(
     val currentTouch by rememberUpdatedState(onTouch)
     val currentPet by rememberUpdatedState(onPet)
     val currentCuddle by rememberUpdatedState(onCuddle)
+    val currentReaction by rememberUpdatedState(reaction)
     var seconds by remember { mutableFloatStateOf(0f) }
     // Each tap restarts its animation, even if the same body part is tapped twice.
-    LaunchedEffect(animated, reactionTick) {
+    LaunchedEffect(animated, reactionTick, speaking) {
         seconds = 0f
         if (animated) {
             val start = android.os.SystemClock.elapsedRealtime()
             while (isActive) {
                 seconds = ((android.os.SystemClock.elapsedRealtime() - start) % 23000L) / 1000f
-                delay(50) // 20fps; paused while offscreen or reduce-motion is enabled.
+                delay(AvatarMotion.frameDelayMs(speaking, currentReaction))
+                // ~11fps idle, ~25fps while speaking/reacting. Paused when inactive.
             }
         }
     }

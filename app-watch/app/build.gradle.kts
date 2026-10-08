@@ -12,8 +12,8 @@ android {
         applicationId = "com.kiumo.xiaozhi"
         minSdk = 26
         targetSdk = 34
-        versionCode = 19
-        versionName = "0.4.3-momo-companion"
+        versionCode = 20
+        versionName = "0.4.4-momo-companion"
 
         vectorDrawables { useSupportLibrary = true }
 

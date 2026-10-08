@@ -80,10 +80,10 @@ object AvatarTouch {
     }
 }
 
-/** Three offline mini-games. No user data or audio is sent to the server. */
+/** Four offline mini-games. No user data or audio is sent to the server. */
 enum class AvatarGame(val title: String) {
     NONE("Free play"), MOMO_SAYS("Momo Says"), TICKLE_RACE("Tickle Race"),
-    DANCE_PARTY("Dance Party")
+    DANCE_PARTY("Dance Party"), HUG_TIME("Hug Time")
 }
 
 /** Pure result: only accepted steps advance, and completion can be awarded once. */
@@ -95,14 +95,17 @@ object AvatarGames {
     val danceSteps = listOf(AvatarPart.FEET, AvatarPart.HANDS, AvatarPart.FEET,
         AvatarPart.HEAD, AvatarPart.HANDS, AvatarPart.FEET)
     const val TICKLE_GOAL = 8
+    const val HUG_GOAL = 3
 
-    fun move(game: AvatarGame, progress: Int, part: AvatarPart,
+    /** A null body part represents a deliberate long-press cuddle rather than a tap. */
+    fun move(game: AvatarGame, progress: Int, part: AvatarPart?,
              momoSequence: List<AvatarPart> = targets): GameMove {
         val goal = when (game) {
             AvatarGame.NONE -> 0
             AvatarGame.MOMO_SAYS -> momoSequence.size
             AvatarGame.TICKLE_RACE -> TICKLE_GOAL
             AvatarGame.DANCE_PARTY -> danceSteps.size
+            AvatarGame.HUG_TIME -> HUG_GOAL
         }
         if (progress < 0 || progress >= goal) return GameMove(false, progress, false)
         val correct = when (game) {
@@ -110,6 +113,7 @@ object AvatarGames {
             AvatarGame.MOMO_SAYS -> part == momoSequence[progress]
             AvatarGame.TICKLE_RACE -> part == AvatarPart.BELLY
             AvatarGame.DANCE_PARTY -> part == danceSteps[progress]
+            AvatarGame.HUG_TIME -> part == null
         }
         val next = if (correct) progress + 1 else progress
         return GameMove(correct, next, correct && next == goal)
@@ -132,4 +136,12 @@ object AvatarIdle {
 
     fun nextSurprise(tick: Int): AvatarReaction =
         surprises[Math.floorMod(tick, surprises.size)]
+}
+
+/** Watch-friendly animation pacing. Higher FPS while reacting, less CPU while idle. */
+object AvatarMotion {
+    const val IDLE_FRAME_MS = 90L
+    const val ACTIVE_FRAME_MS = 40L
+    fun frameDelayMs(speaking: Boolean, reaction: AvatarReaction): Long =
+        if (speaking || reaction != AvatarReaction.NONE) ACTIVE_FRAME_MS else IDLE_FRAME_MS
 }

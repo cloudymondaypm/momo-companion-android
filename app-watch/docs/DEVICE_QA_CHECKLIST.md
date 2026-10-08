@@ -31,6 +31,8 @@ Target device: Kiumo ZH23-YL-RF, Android 8.1 (API 27). Minimum app API is 26.
 | Momo Says | Randomized five-step sequence; wrong taps do not advance | |
 | Tickle Race | Only belly taps count; exactly 8 accepted taps wins | |
 | Dance Party | Six instructed steps; wrong taps do not advance | |
+| Hug Time | Long-press Momo three times for one star; simple taps and swipes do not count | |
+| Idle animation | Movement remains fluid enough at ~11fps; reactions and speaking ~25fps | |
 | Game HUD | Prompt and progress bar remain visible during reactions | |
 | Stop while playing | One tap on Stop ends game; no star awarded | |
 | Game completion | Exactly one star per win; survives app restart | |

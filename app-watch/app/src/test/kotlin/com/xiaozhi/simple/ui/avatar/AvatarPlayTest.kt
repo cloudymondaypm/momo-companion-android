@@ -104,6 +104,27 @@ class AvatarPlayTest {
         later.recycle()
     }
 
+    @Test fun hugTimeNeedsRealLongPressesNotTaps() {
+        assertEquals(GameMove(false, 0, false),
+            AvatarGames.move(AvatarGame.HUG_TIME, 0, AvatarPart.HEAD))
+        assertEquals(GameMove(true, 1, false),
+            AvatarGames.move(AvatarGame.HUG_TIME, 0, null))
+        assertEquals(GameMove(true, 3, true),
+            AvatarGames.move(AvatarGame.HUG_TIME, 2, null))
+        assertEquals(GameMove(false, 3, false),
+            AvatarGames.move(AvatarGame.HUG_TIME, 3, null))
+        assertEquals(GameMove(false, 0, false),
+            AvatarGames.move(AvatarGame.MOMO_SAYS, 0, null))
+        assertEquals(3, AvatarGames.HUG_GOAL)
+    }
+
+    @Test fun adaptiveFrameRateUsesLowerIdleFrequency() {
+        assertEquals(90L, AvatarMotion.frameDelayMs(false, AvatarReaction.NONE))
+        assertEquals(40L, AvatarMotion.frameDelayMs(true, AvatarReaction.NONE))
+        assertEquals(40L, AvatarMotion.frameDelayMs(false, AvatarReaction.CUDDLE))
+        assertTrue(AvatarMotion.IDLE_FRAME_MS > AvatarMotion.ACTIVE_FRAME_MS)
+    }
+
     @Test fun swipePettingHasUniqueFeedbackForEveryPart() {
         val messages = AvatarPart.entries.map { AvatarTouch.strokeCaption(it) }
         assertEquals(6, messages.size)
@@ -121,7 +142,7 @@ class AvatarPlayTest {
         assertTrue(AvatarGames.danceSteps.contains(AvatarPart.HANDS))
         assertEquals(7, AvatarOutfit.entries.size)
         assertEquals(7, AvatarAccessory.entries.size)
-        assertEquals(4, AvatarGame.entries.size)
+        assertEquals(5, AvatarGame.entries.size)
     }
 
     @Test fun newCuddleReactionRenders() {

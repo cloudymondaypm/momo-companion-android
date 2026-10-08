@@ -134,6 +134,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         AvatarGame.MOMO_SAYS -> "You won Momo Says! ⭐"
                         AvatarGame.TICKLE_RACE -> "Tickle champion! 🎉"
                         AvatarGame.DANCE_PARTY -> "Dance star! You did it! 🎵"
+                        AvatarGame.HUG_TIME -> "Super hug champion! 💗"
                         AvatarGame.NONE -> ""
                     }
                 }
@@ -141,6 +142,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     AvatarGame.MOMO_SAYS -> "Try my ${momoSequence.getOrNull(gameProgress)?.label ?: "head"}!"
                     AvatarGame.TICKLE_RACE -> "Find my belly! 😆"
                     AvatarGame.DANCE_PARTY -> "Next: ${AvatarGames.danceSteps.getOrNull(gameProgress)?.label ?: "feet"}!"
+                    AvatarGame.HUG_TIME -> "Hold Momo to cuddle!"
                     AvatarGame.NONE -> ""
                 }
                 activeGame == AvatarGame.MOMO_SAYS -> {
@@ -167,6 +169,18 @@ fun MainScreen(viewModel: MainViewModel) {
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         reaction = AvatarReaction.CUDDLE
         reactionMessage = AvatarReaction.CUDDLE.caption
+        if (game == AvatarGame.HUG_TIME) {
+            val move = AvatarGames.move(game, gameProgress, null, momoSequence)
+            gameProgress = move.progress
+            if (move.completed) {
+                game = AvatarGame.NONE
+                awardStar()
+                reaction = AvatarReaction.CELEBRATE
+                reactionMessage = "Super hug champion! 💗"
+            } else {
+                reactionMessage = "Bunny hug! ${AvatarGames.HUG_GOAL - gameProgress} more!"
+            }
+        }
         reactionTick++
     }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -212,6 +226,7 @@ fun MainScreen(viewModel: MainViewModel) {
         AvatarGame.MOMO_SAYS -> "Tap ${momoSequence.getOrNull(gameProgress)?.label ?: "head"} · ${gameProgress + 1}/${momoSequence.size}"
         AvatarGame.TICKLE_RACE -> "Belly taps · ${gameProgress}/${AvatarGames.TICKLE_GOAL}"
         AvatarGame.DANCE_PARTY -> "Dance ${AvatarGames.danceSteps.getOrNull(gameProgress)?.label ?: "feet"} · ${gameProgress + 1}/${AvatarGames.danceSteps.size}"
+        AvatarGame.HUG_TIME -> "Hold to hug · ${gameProgress}/${AvatarGames.HUG_GOAL}"
         AvatarGame.NONE -> ""
     }
     val latestText = messages.lastOrNull()?.content.orEmpty()
@@ -313,6 +328,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     AvatarGame.MOMO_SAYS -> momoSequence.size
                     AvatarGame.TICKLE_RACE -> AvatarGames.TICKLE_GOAL
                     AvatarGame.DANCE_PARTY -> AvatarGames.danceSteps.size
+                    AvatarGame.HUG_TIME -> AvatarGames.HUG_GOAL
                     AvatarGame.NONE -> 1
                 }
                 LinearProgressIndicator(
@@ -439,6 +455,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     AvatarGame.MOMO_SAYS -> "Momo says: touch my ${momoSequence.first().label}!"
                     AvatarGame.TICKLE_RACE -> "Tickle my belly 8 times!"
                     AvatarGame.DANCE_PARTY -> "Dance! Tap my ${AvatarGames.danceSteps.first().label}!"
+                    AvatarGame.HUG_TIME -> "Hold Momo to hug 3 times!"
                     AvatarGame.NONE -> ""
                 }
                 reactionTick++
@@ -753,6 +770,9 @@ private fun MomoGamesDialog(
                 Text("Dance Party: follow six different body-part dance steps.", fontSize = 11.sp)
                 Button(onClick = { onStart(AvatarGame.DANCE_PARTY) },
                     modifier = Modifier.fillMaxWidth()) { Text("Play Dance Party") }
+                Text("Hug Time: hold Momo to cuddle three times!", fontSize = 11.sp)
+                Button(onClick = { onStart(AvatarGame.HUG_TIME) },
+                    modifier = Modifier.fillMaxWidth()) { Text("Play Hug Time") }
                 if (activeGame != AvatarGame.NONE) {
                     OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
                         Text("Stop game")
