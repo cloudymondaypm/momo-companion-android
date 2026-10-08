@@ -36,18 +36,27 @@ data class AvatarStyle(
 
 /** Touch math lives separately from Compose to make it easy to test on watch-sized screens. */
 object AvatarTouch {
+    /** Hit-test the actual bunny silhouette rather than its rectangular drawing stage. */
     fun locate(x: Float, y: Float, width: Float, height: Float): AvatarPart? {
-        if (width <= 0f || height <= 0f) return null
+        if (!x.isFinite() || !y.isFinite() || !width.isFinite() || !height.isFinite() ||
+            width <= 0f || height <= 0f || x < 0f || y < 0f || x > width || y > height) return null
         val scale = minOf(width, height) / 200f
         val px = (x - (width - 200f * scale) / 2f) / scale
         val py = (y - (height - 200f * scale) / 2f) / scale
-        if (px !in 32f..168f || py !in 11f..188f) return null
-        if (py < 87f && (px in 51f..84f || px in 116f..149f)) return AvatarPart.EARS
-        if (py in 110f..136f && px in 88f..112f) return AvatarPart.NOSE
-        if (py >= 171f && (px in 55f..94f || px in 106f..145f)) return AvatarPart.FEET
-        if (py in 137f..175f && (px < 68f || px > 132f)) return AvatarPart.HANDS
-        if (py in 137f..180f && px in 68f..132f) return AvatarPart.BELLY
-        return AvatarPart.HEAD
+        fun oval(cx: Float, cy: Float, rx: Float, ry: Float): Boolean {
+            val dx = (px - cx) / rx
+            val dy = (py - cy) / ry
+            return dx * dx + dy * dy <= 1f
+        }
+        if (oval(67.5f, 56f, 17f, 46f) || oval(132.5f, 56f, 17f, 46f))
+            return AvatarPart.EARS
+        if (oval(100f, 122f, 14f, 14f)) return AvatarPart.NOSE
+        if (oval(76f, 175f, 22f, 18f) || oval(124f, 175f, 22f, 18f))
+            return AvatarPart.FEET
+        if (oval(51f, 150f, 20f, 23f) || oval(149f, 150f, 20f, 23f))
+            return AvatarPart.HANDS
+        if (oval(100f, 156f, 37f, 26f)) return AvatarPart.BELLY
+        return if (oval(100f, 117f, 65f, 61f)) AvatarPart.HEAD else null
     }
 
     /** Petting feedback does not count as a mini-game tap. */
@@ -76,10 +85,32 @@ enum class AvatarGame(val title: String) {
     DANCE_PARTY("Dance Party")
 }
 
+/** Pure result: only accepted steps advance, and completion can be awarded once. */
+data class GameMove(val accepted: Boolean, val progress: Int, val completed: Boolean)
+
 object AvatarGames {
     val targets = listOf(AvatarPart.HEAD, AvatarPart.NOSE, AvatarPart.EARS,
         AvatarPart.BELLY, AvatarPart.FEET)
     val danceSteps = listOf(AvatarPart.FEET, AvatarPart.HANDS, AvatarPart.FEET,
         AvatarPart.HEAD, AvatarPart.HANDS, AvatarPart.FEET)
     const val TICKLE_GOAL = 8
+
+    fun move(game: AvatarGame, progress: Int, part: AvatarPart,
+             momoSequence: List<AvatarPart> = targets): GameMove {
+        val goal = when (game) {
+            AvatarGame.NONE -> 0
+            AvatarGame.MOMO_SAYS -> momoSequence.size
+            AvatarGame.TICKLE_RACE -> TICKLE_GOAL
+            AvatarGame.DANCE_PARTY -> danceSteps.size
+        }
+        if (progress < 0 || progress >= goal) return GameMove(false, progress, false)
+        val correct = when (game) {
+            AvatarGame.NONE -> false
+            AvatarGame.MOMO_SAYS -> part == momoSequence[progress]
+            AvatarGame.TICKLE_RACE -> part == AvatarPart.BELLY
+            AvatarGame.DANCE_PARTY -> part == danceSteps[progress]
+        }
+        val next = if (correct) progress + 1 else progress
+        return GameMove(correct, next, correct && next == goal)
+    }
 }

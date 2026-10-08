@@ -121,45 +121,39 @@ fun MainScreen(viewModel: MainViewModel) {
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         reaction = AvatarTouch.reaction(part)
         reactionMessage = reaction.caption
-        when (game) {
-            AvatarGame.MOMO_SAYS -> {
-                if (part == momoSequence.getOrNull(gameProgress)) {
-                    gameProgress++
+        if (game != AvatarGame.NONE) {
+            val activeGame = game
+            val move = AvatarGames.move(activeGame, gameProgress, part, momoSequence)
+            gameProgress = move.progress
+            when {
+                move.completed -> {
+                    game = AvatarGame.NONE
+                    awardStar()
+                    reaction = AvatarReaction.CELEBRATE
+                    reactionMessage = when (activeGame) {
+                        AvatarGame.MOMO_SAYS -> "You won Momo Says! ⭐"
+                        AvatarGame.TICKLE_RACE -> "Tickle champion! 🎉"
+                        AvatarGame.DANCE_PARTY -> "Dance star! You did it! 🎵"
+                        AvatarGame.NONE -> ""
+                    }
+                }
+                !move.accepted -> reactionMessage = when (activeGame) {
+                    AvatarGame.MOMO_SAYS -> "Try my ${momoSequence.getOrNull(gameProgress)?.label ?: "head"}!"
+                    AvatarGame.TICKLE_RACE -> "Find my belly! 😆"
+                    AvatarGame.DANCE_PARTY -> "Next: ${AvatarGames.danceSteps.getOrNull(gameProgress)?.label ?: "feet"}!"
+                    AvatarGame.NONE -> ""
+                }
+                activeGame == AvatarGame.MOMO_SAYS -> {
                     reaction = AvatarReaction.CELEBRATE
                     reactionMessage = "Great job!"
-                    if (gameProgress >= momoSequence.size) {
-                        game = AvatarGame.NONE
-                        awardStar()
-                        reactionMessage = "You won Momo Says! ⭐"
-                    }
-                } else reactionMessage = "Oops! Try my ${momoSequence[gameProgress].label}!"
-            }
-            AvatarGame.TICKLE_RACE -> {
-                if (part == AvatarPart.BELLY) {
-                    gameProgress++
-                    if (gameProgress >= AvatarGames.TICKLE_GOAL) {
-                        game = AvatarGame.NONE
-                        awardStar()
-                        reaction = AvatarReaction.CELEBRATE
-                        reactionMessage = "Tickle champion! 🎉"
-                    } else reactionMessage = "Heehee! ${AvatarGames.TICKLE_GOAL - gameProgress} more!"
-                } else reactionMessage = "Find my belly! 😆"
-            }
-            AvatarGame.DANCE_PARTY -> {
-                if (part == AvatarGames.danceSteps.getOrNull(gameProgress)) {
-                    gameProgress++
+                }
+                activeGame == AvatarGame.TICKLE_RACE ->
+                    reactionMessage = "Heehee! ${AvatarGames.TICKLE_GOAL - gameProgress} more!"
+                activeGame == AvatarGame.DANCE_PARTY -> {
                     reaction = AvatarReaction.DANCE
-                    if (gameProgress >= AvatarGames.danceSteps.size) {
-                        game = AvatarGame.NONE
-                        awardStar()
-                        reaction = AvatarReaction.CELEBRATE
-                        reactionMessage = "Dance star! You did it! 🎵"
-                    } else {
-                        reactionMessage = "Nice move! Next: ${AvatarGames.danceSteps[gameProgress].label}!"
-                    }
-                } else reactionMessage = "Next move: ${AvatarGames.danceSteps[gameProgress].label}!"
+                    reactionMessage = "Nice move! Keep dancing!"
+                }
             }
-            AvatarGame.NONE -> Unit
         }
         reactionTick++
     }
@@ -193,9 +187,9 @@ fun MainScreen(viewModel: MainViewModel) {
 
     // Keep the next step visible even while Momo giggles or celebrates.
     val gameInstruction = when (game) {
-        AvatarGame.MOMO_SAYS -> "Momo says: ${momoSequence.getOrNull(gameProgress)?.label ?: "done"} (${gameProgress + 1}/${momoSequence.size})"
-        AvatarGame.TICKLE_RACE -> "Tickle belly: ${gameProgress}/${AvatarGames.TICKLE_GOAL}"
-        AvatarGame.DANCE_PARTY -> "Dance: ${AvatarGames.danceSteps.getOrNull(gameProgress)?.label ?: "done"} (${gameProgress + 1}/${AvatarGames.danceSteps.size})"
+        AvatarGame.MOMO_SAYS -> "Tap ${momoSequence.getOrNull(gameProgress)?.label ?: "head"} · ${gameProgress + 1}/${momoSequence.size}"
+        AvatarGame.TICKLE_RACE -> "Belly taps · ${gameProgress}/${AvatarGames.TICKLE_GOAL}"
+        AvatarGame.DANCE_PARTY -> "Dance ${AvatarGames.danceSteps.getOrNull(gameProgress)?.label ?: "feet"} · ${gameProgress + 1}/${AvatarGames.danceSteps.size}"
         AvatarGame.NONE -> ""
     }
     val latestText = messages.lastOrNull()?.content.orEmpty()

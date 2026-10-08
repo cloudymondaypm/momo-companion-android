@@ -34,6 +34,44 @@ class AvatarPlayTest {
         assertNull(AvatarTouch.locate(20f, 100f, 300f, 200f))
     }
 
+    @Test fun touchTargetsRejectEmptyCanvasAndOutOfBounds() {
+        for (side in listOf(80f, 160f, 240f)) {
+            val scale = side / 200f
+            assertNull(AvatarTouch.locate(100f * scale, 15f * scale, side, side))
+            assertNull(AvatarTouch.locate(35f * scale, 20f * scale, side, side))
+            assertNull(AvatarTouch.locate(165f * scale, 20f * scale, side, side))
+            assertEquals(AvatarPart.HEAD, AvatarTouch.locate(100f * scale, 95f * scale, side, side))
+            assertEquals(AvatarPart.EARS, AvatarTouch.locate(65f * scale, 45f * scale, side, side))
+            assertEquals(AvatarPart.NOSE, AvatarTouch.locate(100f * scale, 122f * scale, side, side))
+            assertEquals(AvatarPart.HANDS, AvatarTouch.locate(48f * scale, 151f * scale, side, side))
+        }
+        assertNull(AvatarTouch.locate(-1f, 100f, 200f, 200f))
+        assertNull(AvatarTouch.locate(Float.NaN, 100f, 200f, 200f))
+        assertNull(AvatarTouch.locate(100f, 100f, Float.POSITIVE_INFINITY, 200f))
+    }
+
+    @Test fun gameRulesRejectWrongMovesAndAwardCompletionOnlyOnce() {
+        val order = listOf(AvatarPart.HEAD, AvatarPart.EARS)
+        assertEquals(GameMove(false, 0, false), AvatarGames.move(
+            AvatarGame.MOMO_SAYS, 0, AvatarPart.NOSE, order))
+        assertEquals(GameMove(true, 1, false), AvatarGames.move(
+            AvatarGame.MOMO_SAYS, 0, AvatarPart.HEAD, order))
+        assertEquals(GameMove(true, 2, true), AvatarGames.move(
+            AvatarGame.MOMO_SAYS, 1, AvatarPart.EARS, order))
+        assertEquals(GameMove(false, 2, false), AvatarGames.move(
+            AvatarGame.MOMO_SAYS, 2, AvatarPart.EARS, order))
+        assertEquals(GameMove(false, 0, false), AvatarGames.move(
+            AvatarGame.NONE, 0, AvatarPart.BELLY))
+        assertEquals(GameMove(false, 0, false), AvatarGames.move(
+            AvatarGame.TICKLE_RACE, 0, AvatarPart.FEET))
+        assertEquals(GameMove(true, 8, true), AvatarGames.move(
+            AvatarGame.TICKLE_RACE, 7, AvatarPart.BELLY))
+        assertEquals(GameMove(true, 6, true), AvatarGames.move(
+            AvatarGame.DANCE_PARTY, 5, AvatarPart.FEET))
+        assertEquals(GameMove(false, -1, false), AvatarGames.move(
+            AvatarGame.DANCE_PARTY, -1, AvatarPart.FEET))
+    }
+
     @Test fun swipePettingHasUniqueFeedbackForEveryPart() {
         val messages = AvatarPart.entries.map { AvatarTouch.strokeCaption(it) }
         assertEquals(6, messages.size)
