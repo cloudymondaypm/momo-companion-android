@@ -1,6 +1,7 @@
 package com.xiaozhi.simple.ui.screen
 
 import android.Manifest
+import android.content.Context
 import android.view.KeyEvent
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
@@ -8,6 +9,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
@@ -23,6 +25,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import com.xiaozhi.simple.R
@@ -45,7 +52,8 @@ import com.xiaozhi.simple.model.DeviceState
 import com.xiaozhi.simple.model.MessageType
 import com.xiaozhi.simple.model.XiaozhiConfig
 import com.xiaozhi.simple.model.AvatarMood
-import com.xiaozhi.simple.ui.avatar.MomoAvatar
+import com.xiaozhi.simple.ui.avatar.*
+import kotlinx.coroutines.delay
 import com.xiaozhi.simple.viewmodel.MainViewModel
 
 /** Compact UI designed for a small Android kids-watch display. */
@@ -71,6 +79,67 @@ fun MainScreen(viewModel: MainViewModel) {
     val lastHardwareKey by viewModel.lastHardwareKey.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
+    var showWardrobe by remember { mutableStateOf(false) }
+    var showGames by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val wardrobePrefs = remember(context) {
+        context.getSharedPreferences("momo_watch_wardrobe", Context.MODE_PRIVATE)
+    }
+    var outfit by remember {
+        mutableStateOf(runCatching {
+            AvatarOutfit.valueOf(wardrobePrefs.getString("outfit", "CLASSIC") ?: "CLASSIC")
+        }.getOrDefault(AvatarOutfit.CLASSIC))
+    }
+    var accessory by remember {
+        mutableStateOf(runCatching {
+            AvatarAccessory.valueOf(wardrobePrefs.getString("accessory", "NONE") ?: "NONE")
+        }.getOrDefault(AvatarAccessory.NONE))
+    }
+    var reaction by remember { mutableStateOf(AvatarReaction.NONE) }
+    var reactionTick by remember { mutableIntStateOf(0) }
+    var reactionMessage by remember { mutableStateOf("") }
+    var game by remember { mutableStateOf(AvatarGame.NONE) }
+    var gameProgress by remember { mutableIntStateOf(0) }
+
+    // Each reaction is fleeting. Does not interfere with the voice mood or server connection.
+    LaunchedEffect(reactionTick) {
+        if (reactionTick > 0) {
+            delay(1900)
+            reaction = AvatarReaction.NONE
+            reactionMessage = ""
+        }
+    }
+    val touchMomo: (AvatarPart) -> Unit = { part ->
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        reaction = AvatarTouch.reaction(part)
+        reactionMessage = reaction.caption
+        when (game) {
+            AvatarGame.MOMO_SAYS -> {
+                if (part == AvatarGames.targets.getOrNull(gameProgress)) {
+                    gameProgress++
+                    reaction = AvatarReaction.CELEBRATE
+                    reactionMessage = "Great job!"
+                    if (gameProgress >= AvatarGames.targets.size) {
+                        game = AvatarGame.NONE
+                        reactionMessage = "You won Momo Says! ⭐"
+                    }
+                } else reactionMessage = "Oops! Try my ${AvatarGames.targets[gameProgress].label}!"
+            }
+            AvatarGame.TICKLE_RACE -> {
+                if (part == AvatarPart.BELLY) {
+                    gameProgress++
+                    if (gameProgress >= AvatarGames.TICKLE_GOAL) {
+                        game = AvatarGame.NONE
+                        reaction = AvatarReaction.CELEBRATE
+                        reactionMessage = "Tickle champion! 🎉"
+                    } else reactionMessage = "Heehee! ${AvatarGames.TICKLE_GOAL - gameProgress} more!"
+                } else reactionMessage = "Find my belly! 😆"
+            }
+            AvatarGame.NONE -> Unit
+        }
+        reactionTick++
+    }
     val lifecycleOwner = LocalLifecycleOwner.current
     var foreground by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) }
     DisposableEffect(lifecycleOwner) {
@@ -155,42 +224,84 @@ fun MainScreen(viewModel: MainViewModel) {
             }
 
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .pointerInput(viewModel, micPermission.status.isGranted) {
-                        detectTapGestures(
-                            onPress = {
-                                if (micPermission.status.isGranted) {
-                                    viewModel.onPressStart()
-                                    try {
-                                        awaitRelease()
-                                    } finally {
-                                        viewModel.onPressEnd()
-                                    }
-                                }
-                            }
-                        )
-                    },
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 MomoAvatar(mood, speaking = deviceState == DeviceState.SPEAKING,
-                    animated = foreground && !showSettings && !config.reduceMotion,
-                    modifier = Modifier.fillMaxSize())
+                    animated = foreground && !showSettings && !showWardrobe &&
+                        !showGames && !config.reduceMotion,
+                    reaction = reaction, reactionTick = reactionTick,
+                    style = AvatarStyle(outfit, accessory),
+                    onTouch = touchMomo, modifier = Modifier.fillMaxSize())
             }
             Text("Momo", color = Color(0xFF71608C), fontWeight = FontWeight.Bold,
                 fontSize = if (compact) 12.sp else 16.sp)
-            Text(if (deviceState == DeviceState.SPEAKING && mood == AvatarMood.HAPPY) "Let's chat!" else mood.caption,
+            Text(
+                text = when {
+                    reactionMessage.isNotBlank() -> reactionMessage
+                    game == AvatarGame.MOMO_SAYS ->
+                        "Momo says: touch my ${AvatarGames.targets[gameProgress].label}!"
+                    game == AvatarGame.TICKLE_RACE ->
+                        "Tickle my belly! ${gameProgress}/${AvatarGames.TICKLE_GOAL}"
+                    deviceState == DeviceState.SPEAKING && mood == AvatarMood.HAPPY -> "Let's chat!"
+                    else -> mood.caption
+                },
                 color = Color(0xFF56656D), fontSize = if (compact) 10.sp else 12.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(3.dp))
+
+            // Dedicated press-and-hold microphone. Tapping Momo never records audio.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = { viewModel.onPressEnd(); showWardrobe = true },
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) { Text("Dress", fontSize = if (compact) 10.sp else 12.sp) }
+                OutlinedButton(
+                    onClick = { viewModel.onPressEnd(); showGames = true },
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) { Text("Play", fontSize = if (compact) 10.sp else 12.sp) }
+                Box(
+                    modifier = Modifier
+                        .width(if (compact) 90.dp else 108.dp)
+                        .height(44.dp)
+                        .background(
+                            if (deviceState == DeviceState.LISTENING) Color(0xFF318D73)
+                            else Color(0xFF7756A6), RoundedCornerShape(24.dp)
+                        )
+                        .semantics { contentDescription = "Hold to talk to Momo; release to send" }
+                        .pointerInput(viewModel, micPermission.status.isGranted) {
+                            detectTapGestures(onPress = {
+                                if (!micPermission.status.isGranted) {
+                                    micPermission.launchPermissionRequest()
+                                } else {
+                                    viewModel.onPressStart()
+                                    try { awaitRelease() } finally { viewModel.onPressEnd() }
+                                }
+                            })
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        if (deviceState == DeviceState.LISTENING) "Release" else "🎙 Talk",
+                        color = Color.White, fontWeight = FontWeight.Bold,
+                        fontSize = if (compact) 11.sp else 13.sp
+                    )
+                }
+            }
             Spacer(Modifier.height(3.dp))
 
             Text(
                 text = when {
                     keyLearning -> "Press a physical button"
-                    pttKeyCode == KeyEvent.KEYCODE_UNKNOWN -> "Hold screen to talk • map button in ⚙"
+                    pttKeyCode == KeyEvent.KEYCODE_UNKNOWN -> "Hold 🎙 to talk • side button in ⚙"
                     deviceState == DeviceState.LISTENING -> "Release to send"
-                    else -> "Hold button to talk"
+                    else -> "Hold 🎙 or side button to talk"
                 },
                 fontSize = if (compact) 10.sp else 12.sp,
                 textAlign = TextAlign.Center,
@@ -215,6 +326,41 @@ fun MainScreen(viewModel: MainViewModel) {
         }
     }
 
+    if (showWardrobe) {
+        MomoWardrobeDialog(
+            outfit = outfit, accessory = accessory,
+            onOutfit = {
+                outfit = it
+                wardrobePrefs.edit().putString("outfit", it.name).apply()
+            },
+            onAccessory = {
+                accessory = it
+                wardrobePrefs.edit().putString("accessory", it.name).apply()
+            },
+            onDismiss = { showWardrobe = false }
+        )
+    }
+    if (showGames) {
+        MomoGamesDialog(
+            activeGame = game,
+            onStart = {
+                game = it
+                gameProgress = 0
+                reaction = AvatarReaction.CELEBRATE
+                reactionMessage = if (it == AvatarGame.MOMO_SAYS)
+                    "Momo says: touch my head!" else "Tickle my belly 8 times!"
+                reactionTick++
+                showGames = false
+            },
+            onStop = {
+                game = AvatarGame.NONE
+                gameProgress = 0
+                reactionMessage = ""
+                showGames = false
+            },
+            onDismiss = { showGames = false }
+        )
+    }
     if (showSettings) {
         WatchSettingsDialog(
             config = config,
@@ -417,6 +563,100 @@ private fun WatchSettingsDialog(
                 ) {
                     Text("Save & reconnect")
                 }
+            }
+        }
+    }
+}
+
+/** Full-screen scrolling pickers stay usable on the Kiumo's small Android 8.1 display. */
+@Composable
+private fun MomoWardrobeDialog(
+    outfit: AvatarOutfit,
+    accessory: AvatarAccessory,
+    onOutfit: (AvatarOutfit) -> Unit,
+    onAccessory: (AvatarAccessory) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize().padding(8.dp),
+            shape = MaterialTheme.shapes.large) {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                Text("Momo's wardrobe", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("Choose an outfit", fontSize = 12.sp)
+                AvatarOutfit.entries.chunked(2).forEach { pair ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        pair.forEach { item ->
+                            val selected = item == outfit
+                            OutlinedButton(
+                                onClick = { onOutfit(item) },
+                                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                                contentPadding = PaddingValues(3.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selected) Color(0xFFE5D8FA)
+                                        else Color.Transparent
+                                )
+                            ) {
+                                Text(item.label, fontSize = 10.sp, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+                Text("Pick an accessory", fontSize = 12.sp)
+                AvatarAccessory.entries.chunked(2).forEach { pair ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        pair.forEach { item ->
+                            OutlinedButton(
+                                onClick = { onAccessory(item) },
+                                modifier = Modifier.weight(1f).heightIn(min = 42.dp),
+                                contentPadding = PaddingValues(3.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (item == accessory) Color(0xFFE5D8FA)
+                                        else Color.Transparent
+                                )
+                            ) { Text(item.label, fontSize = 10.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis) }
+                        }
+                    }
+                }
+                Button(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MomoGamesDialog(
+    activeGame: AvatarGame,
+    onStart: (AvatarGame) -> Unit,
+    onStop: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(modifier = Modifier.fillMaxSize().padding(8.dp),
+            shape = MaterialTheme.shapes.large) {
+            Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Play with Momo", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("Momo Says: touch the body part Momo names (5 rounds).",
+                    fontSize = 11.sp)
+                Button(onClick = { onStart(AvatarGame.MOMO_SAYS) },
+                    modifier = Modifier.fillMaxWidth()) { Text("Play Momo Says") }
+                Text("Tickle Race: tap Momo's belly 8 times!",
+                    fontSize = 11.sp)
+                Button(onClick = { onStart(AvatarGame.TICKLE_RACE) },
+                    modifier = Modifier.fillMaxWidth()) { Text("Play Tickle Race") }
+                if (activeGame != AvatarGame.NONE) {
+                    OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
+                        Text("Stop game")
+                    }
+                }
+                TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Back") }
             }
         }
     }
