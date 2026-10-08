@@ -83,7 +83,9 @@ class PhoneMomoSmokeTest {
             val composer = device.wait(Until.findObject(By.clazz("android.widget.EditText")),5000)
             assertNotNull("Typed chat editor must be available offline",composer)
             composer.text = "Hello Momo"
-            assertFalse(device.findObject(By.text("Send")).isEnabled)
+            val sendButton = device.findObject(By.desc("Send typed message"))
+            assertNotNull("Accessible Send button must be present",sendButton)
+            assertFalse("Send must be disabled offline",sendButton.isEnabled)
             device.pressBack()
             assertTrue(device.wait(Until.hasObject(By.text("Hello Momo")),5000))
         }

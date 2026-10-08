@@ -36,14 +36,7 @@ jobs:
           target: default
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: |
-            set +e
-            ./app-phone/gradlew -p app-phone connectedDebugAndroidTest
-            test_result=$?
-            mkdir -p phone-preview
-            adb exec-out run-as space.spacecloud.xiaozhi.fold5 cat files/phone-momo-depth.png > phone-preview/phone-momo-depth.png
-            python3 -c "import pathlib,base64; p=pathlib.Path('phone-preview/phone-momo-depth.png'); print('MOMO_PREVIEW_BASE64='+base64.b64encode(p.read_bytes()).decode() if p.exists() and p.stat().st_size else 'No emulator preview available')"
-            exit "$test_result"
+          script: bash app-phone/scripts/emulator-smoke.sh
       - name: Upload phone QA evidence
         if: always()
         uses: actions/upload-artifact@v4

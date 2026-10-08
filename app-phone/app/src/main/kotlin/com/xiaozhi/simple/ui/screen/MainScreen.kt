@@ -210,7 +210,8 @@ private fun TypedComposer(connected: Boolean, onSend: (String) -> Boolean) {
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { send() })
         )
-        Button(onClick = send, enabled = canSend) { Text("Send") }
+        Button(onClick = send, enabled = canSend,
+            modifier = Modifier.semantics { contentDescription = "Send typed message" }) { Text("Send") }
     }
 }
 
