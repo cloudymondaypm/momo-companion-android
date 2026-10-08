@@ -64,7 +64,7 @@ class MomoRendererTest {
         bitmap.recycle()
         run {
             val icon=org.robolectric.RuntimeEnvironment.getApplication().resources
-                .getDrawable(com.xiaozhi.simple.R.drawable.ic_launcher_watch,null)
+                .getDrawable(com.xiaozhi.simple.R.drawable.ic_launcher_momo,null)
             val iconBitmap=Bitmap.createBitmap(192,192,Bitmap.Config.ARGB_8888)
             icon.setBounds(0,0,192,192)
             icon.draw(Canvas(iconBitmap))
