@@ -26,6 +26,7 @@ import com.xiaozhi.simple.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -211,7 +212,11 @@ private fun TypedComposer(connected: Boolean, onSend: (String) -> Boolean) {
             keyboardActions = KeyboardActions(onSend = { send() })
         )
         Button(onClick = send, enabled = canSend,
-            modifier = Modifier.semantics { contentDescription = "Send typed message" }) { Text("Send") }
+            modifier = Modifier.semantics {
+                contentDescription = "Send typed message"
+                role = Role.Button
+                if (!canSend) disabled()
+            }) { Text("Send") }
     }
 }
 
