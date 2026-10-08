@@ -2,6 +2,8 @@ package com.xiaozhi.simple
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.content.ContentValues
+import android.provider.MediaStore
 import android.os.Handler
 import android.os.Looper
 import android.view.PixelCopy
@@ -65,7 +67,13 @@ class PhoneMomoSmokeTest {
             assertTrue("GL output must contain the mint character",mintPixels>100)
             bitmap.recycle()
             instrumentation.uiAutomation.takeScreenshot()?.let { shot ->
-                File(context.filesDir,"phone-momo-depth.png").outputStream().use {
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME,"phone-momo-depth.png")
+                    put(MediaStore.Images.Media.MIME_TYPE,"image/png")
+                    put(MediaStore.Images.Media.RELATIVE_PATH,"Pictures/Momo")
+                }
+                val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values)!!
+                context.contentResolver.openOutputStream(uri)!!.use {
                     shot.compress(Bitmap.CompressFormat.PNG,100,it)
                 }
                 shot.recycle()

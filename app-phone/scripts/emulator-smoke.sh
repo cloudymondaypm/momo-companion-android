@@ -4,12 +4,12 @@ set +e
 ./app-phone/gradlew -p app-phone connectedDebugAndroidTest
 test_result=$?
 mkdir -p phone-preview
-adb exec-out run-as space.spacecloud.xiaozhi.fold5 cat files/phone-momo-depth.png > phone-preview/phone-momo-depth.png
+adb exec-out cat /sdcard/Pictures/Momo/phone-momo-depth.png > phone-preview/phone-momo-depth.png
 python3 - <<'PY'
 import base64
 from pathlib import Path
 p = Path("phone-preview/phone-momo-depth.png")
-if p.exists() and p.stat().st_size:
+if p.exists() and p.read_bytes().startswith(bytes.fromhex("89504e470d0a1a0a")):
     print("MOMO_PREVIEW_BASE64=" + base64.b64encode(p.read_bytes()).decode())
 else:
     print("No emulator preview available")
