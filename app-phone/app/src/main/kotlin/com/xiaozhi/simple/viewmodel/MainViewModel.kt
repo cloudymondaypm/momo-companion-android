@@ -150,7 +150,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val sent = text.trim()
         pendingTypedEchoes.addLast(sent)
         while (pendingTypedEchoes.size > 100) pendingTypedEchoes.removeFirst()
-        ignoreTts = false
+        // Keep stale playback suppressed until the server starts the new TTS reply.
         serverMood = false
         textMood(sent)
         addMessage(Message(type = MessageType.USER, content = sent))

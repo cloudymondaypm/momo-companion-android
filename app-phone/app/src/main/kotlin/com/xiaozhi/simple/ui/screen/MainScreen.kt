@@ -125,7 +125,7 @@ fun MainScreen(model: MainViewModel) {
     if (showSettings) SettingsDialog(config, notice, setupInfo, setupBusy, model::getServerSetup,
         dismiss = { showSettings = false; model.settings(false) },
         save = { if (model.saveConfig(it)) { showSettings = false; model.settings(false) } },
-        connect = model::connect, disconnect = model::disconnect, presetConnect = model::connectToPresetServer)
+        connect = model::connect, disconnect = model::disconnect, presetConnect = { model.connectToPresetServer(); showSettings = false; model.settings(false) })
 }
 
 @Composable
