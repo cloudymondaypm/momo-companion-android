@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: '17', cache: gradle}
       - name: Install Android components
-        run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0' 'ndk;25.1.8937393' 'cmake;3.22.1'
+        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 'platforms;android-34' 'build-tools;34.0.0' 'ndk;25.1.8937393' 'cmake;3.22.1'
       - run: chmod +x app-watch/gradlew && ./app-watch/gradlew -p app-watch assembleDebug testDebugUnitTest
       - uses: actions/upload-artifact@v4
         with: {name: momo-companion-watch-debug, path: app-watch/app/build/outputs/apk/debug/*.apk, if-no-files-found: error}
