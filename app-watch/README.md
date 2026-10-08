@@ -2,12 +2,13 @@
 
 Momo Companion is a small-screen Xiaozhi Android client for the Kiumo ZH23-YL-RF watch, with a pettable, dressable mint bunny and a dedicated hold-to-talk button.
 
-Version: **0.4.4-momo-companion** (version code 20). Package: `com.kiumo.xiaozhi`.
+Version: **0.4.5-momo-companion** (version code 21). Package: `com.kiumo.xiaozhi`.
 
 ![Momo expressions](docs/Momo-Expressions.png)
 
 ## Features
 
+- App-only display idle timeout: default 2 minutes, adjustable to 30 seconds, 1, 2, 5 or 10 minutes in Settings. On expiry Momo goes black, app brightness drops to minimum and Android controls physical sleep. No global settings are changed. See [display policy and hardware limitation](docs/DISPLAY_TIMEOUT.md).
 - Android 8.1 compatible: minimum API 26, target/compile API 34.
 - Lightweight native vector avatar: blinking, gentle movement, celebrations, an animated talking mouth and surprise Peekaboo/silly faces, waves or dances while idle. Adaptive animation pacing reduces work between interactions.
 - Happy, excited, curious, caring, calm, listening, thinking, and sleepy expressions.
@@ -15,6 +16,7 @@ Version: **0.4.4-momo-companion** (version code 20). Package: `com.kiumo.xiaozhi
 - Touch Momo's ears, head, nose, hands, belly or feet for funny gestures; accurate body-shaped hit areas prevent background touches. Swipe to pet a body part or long-press for cuddles with floating hearts.
 - Seven outfits (including pajamas and superhero cape) and seven accessory choices (including none), saved locally with a live preview.
 - Four offline games: **Momo Says** (shuffled), **Tickle Race**, **Dance Party**, and **Hug Time** (three long-press cuddles). Game steps and a progress bar stay visible during reactions, a one-tap Stop button is available, and stars from wins are saved on the watch.
+- Petting, wardrobe, stars and all games remain local during connection failures or without Wi-Fi. Talk is gray offline and only works after a completed server connection.
 - Dedicated on-screen **Talk** button (hold to record, release to send); tapping Momo never starts voice recording.
 - Physical-button push-to-talk with learn/mapping mode remains supported.
 - Microphone opens only while PTT is held and stops on release, cancellation, pause, focus loss, or connection loss.
@@ -78,7 +80,7 @@ WebSocket: wss://xiaozhi.spacecloud.space/xiaozhi/v1/
 Device setup / OTA: https://xiaozhi.spacecloud.space/xiaozhi/ota/
 ```
 
-These are public endpoint addresses, not credentials. Change them in the app's Settings for your own server. Leave Bearer token blank and enable **Get token from my server** for automatic authentication. If a binding code appears, bind it in your server console and reconnect. Device and client identity are generated on the watch; no real watch ID or bearer token is included in this source archive.
+These are public endpoint addresses, not credentials. Change them in the app's Settings for your own server. Tap Save, then reopen Settings and tap Connect to use server changes. Display timeout choices save immediately and never reconnect. Leave Bearer token blank and enable **Get token from my server** for automatic authentication. If a binding code appears, bind it in your server console and reconnect. Device and client identity are generated on the watch; no real watch ID or bearer token is included in this source archive.
 
 The app keeps the configured WebSocket address even if the OTA response advertises a placeholder or private address. OTA setup does not download or install firmware. Normal operation does not require xiaozhi.me.
 
@@ -105,6 +107,6 @@ Then follow your new GitHub repository's instructions to add its remote and push
 
 ## Verification and credits
 
-The earlier Momo APK passed build/signature verification and tests. Version 0.4.4 adds Hug Time for long-press interactions and adaptive animation pacing (~11fps idle, ~25fps while active) for a more efficient, responsive watch avatar. Run watch CI and test on physical hardware. Physical watch testing remains necessary.
+The earlier Momo APK passed build/signature verification and tests. Version 0.4.5 adds the configurable app display timeout and clear offline play/voice availability, with Robolectric API 27 coverage. Hug Time and adaptive animation pacing remain included. Run watch CI and test on physical hardware. Physical watch testing remains necessary.
 
 Adapted from [jerrygugu/xiaozhi-android](https://github.com/jerrygugu/xiaozhi-android), commit `e2a026401247f8313262d8fc1e7400dd53fb8e4d`, under the MIT license. Bundled [Opus 1.5.2](https://github.com/xiph/opus/tree/v1.5.2), commit `ddbe48383984d56acd9e1ab6a090c54ca6b735a6`, retains its BSD license and notices. Momo artwork and watch adaptations were added for this build. See [third-party notices](THIRD_PARTY_NOTICES.md).
