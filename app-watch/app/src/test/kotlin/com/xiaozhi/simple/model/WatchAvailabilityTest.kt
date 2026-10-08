@@ -3,7 +3,12 @@ package com.xiaozhi.simple.model
 import com.xiaozhi.simple.ui.avatar.*
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [27])
 class WatchAvailabilityTest {
     private val offlineStates = listOf(ConnectionState.Disconnected,
         ConnectionState.Connecting, ConnectionState.Error("Server unavailable"))
