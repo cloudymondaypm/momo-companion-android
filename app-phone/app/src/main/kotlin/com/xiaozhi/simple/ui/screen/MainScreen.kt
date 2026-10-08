@@ -137,7 +137,7 @@ private fun TalkPanel(modifier: Modifier, label: String, accent: Color, recordin
     onStart: () -> Unit, onEnd: () -> Unit, onStop: () -> Unit, onConnect: () -> Unit,
     requestPermission: () -> Unit) {
     Surface(modifier, shape = MaterialTheme.shapes.extraLarge, tonalElevation = 2.dp) {
-        Column(Modifier.then(if (short) Modifier.verticalScroll(rememberScrollState()) else Modifier).padding(if (short) 10.dp else 16.dp),
+        Column(Modifier.then(if (short && wide) Modifier.verticalScroll(rememberScrollState()) else Modifier).padding(if (short) 10.dp else 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(Modifier.size(8.dp), shape = CircleShape, color = accent) {}

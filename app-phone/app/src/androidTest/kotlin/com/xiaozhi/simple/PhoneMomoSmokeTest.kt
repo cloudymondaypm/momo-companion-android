@@ -90,7 +90,11 @@ class PhoneMomoSmokeTest {
             device.findObject(By.text("Stop")).click()
             val composer = device.wait(Until.findObject(By.clazz("android.widget.EditText")),5000)
             assertNotNull("Typed chat editor must be available offline",composer)
-            composer.text = "Hello Momo"
+            composer.click() // Exercise the real keyboard and compact layout.
+            device.waitForIdle()
+            device.findObject(By.clazz("android.widget.EditText")).text = "Hello Momo"
+            assertTrue("Draft must stay visible with keyboard open",
+                device.wait(Until.hasObject(By.text("Hello Momo")),5000))
             val sendButton = device.findObject(By.desc("Send typed message"))
             assertNotNull("Accessible Send button must be present",sendButton)
             assertFalse("Send must be disabled offline",sendButton.isEnabled)
