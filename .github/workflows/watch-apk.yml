@@ -1,0 +1,20 @@
+name: Build watch APK
+on:
+  push:
+    paths: ['app-watch/**', '.github/workflows/watch-apk.yml']
+  pull_request:
+    paths: ['app-watch/**', '.github/workflows/watch-apk.yml']
+  workflow_dispatch:
+jobs:
+  build-watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: {distribution: temurin, java-version: '17', cache: gradle}
+      - uses: android-actions/setup-android@v3
+      - name: Install Android components
+        run: sdkmanager 'platforms;android-34' 'build-tools;34.0.0' 'ndk;25.1.8937393' 'cmake;3.22.1'
+      - run: chmod +x app-watch/gradlew && ./app-watch/gradlew -p app-watch assembleDebug testDebugUnitTest
+      - uses: actions/upload-artifact@v4
+        with: {name: momo-companion-watch-debug, path: app-watch/app/build/outputs/apk/debug/*.apk, if-no-files-found: error}
