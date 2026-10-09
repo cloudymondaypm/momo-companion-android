@@ -27,6 +27,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.onNodeWithContentDescription
 import org.junit.runner.RunWith
 import java.io.File
@@ -46,10 +47,19 @@ class PhoneMomoSmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             assertTrue(device.wait(Until.hasObject(By.text("Momo Companion")),10000))
             compose.onNodeWithText("Chat").performClick()
+            compose.waitUntil(5000) {
+                compose.onNodeWithText("Text replies only Â· Momo's voice is off").isDisplayed()
+            }
             compose.onNodeWithText("Text replies only Â· Momo's voice is off").assertIsDisplayed()
             scenario.recreate()
+            compose.waitUntil(5000) {
+                compose.onNodeWithText("Text replies only Â· Momo's voice is off").isDisplayed()
+            }
             compose.onNodeWithText("Text replies only Â· Momo's voice is off").assertIsDisplayed()
             compose.onNodeWithText("Speak").performClick()
+            compose.waitUntil(5000) {
+                compose.onNodeWithText("Voice replies on Â· hold to talk or type below").isDisplayed()
+            }
             compose.onNodeWithText("Voice replies on Â· hold to talk or type below").assertIsDisplayed()
             device.waitForIdle()
             var depth: MomoDepthView? = null
