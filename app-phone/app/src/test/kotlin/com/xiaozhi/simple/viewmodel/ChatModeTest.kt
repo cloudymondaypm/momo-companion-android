@@ -1,6 +1,5 @@
 package com.xiaozhi.simple.viewmodel
 
-import android.app.Application
 import android.os.Looper
 import androidx.lifecycle.ViewModelStore
 import com.xiaozhi.simple.model.*
@@ -17,7 +16,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [29])
 class ChatModeTest {
     @Test fun chatKeepsTextButNeverCreatesNativeAudioPlaybackAndPersists() {
-        val app = RuntimeEnvironment.getApplication<Application>()
+        val app = RuntimeEnvironment.getApplication()
         val prefs = app.getSharedPreferences("fold5_config", 0)
         prefs.edit().clear().putBoolean("auto_connect", false).commit()
         val model = MainViewModel(app)
