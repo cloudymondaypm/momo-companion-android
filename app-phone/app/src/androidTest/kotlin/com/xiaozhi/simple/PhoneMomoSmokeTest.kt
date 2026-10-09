@@ -45,6 +45,12 @@ class PhoneMomoSmokeTest {
         val device = UiDevice.getInstance(instrumentation)
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             assertTrue(device.wait(Until.hasObject(By.text("Momo Companion")),10000))
+            compose.onNodeWithText("Chat").performClick()
+            compose.onNodeWithText("Text replies only Â· Momo's voice is off").assertIsDisplayed()
+            scenario.recreate()
+            compose.onNodeWithText("Text replies only Â· Momo's voice is off").assertIsDisplayed()
+            compose.onNodeWithText("Speak").performClick()
+            compose.onNodeWithText("Voice replies on Â· hold to talk or type below").assertIsDisplayed()
             device.waitForIdle()
             var depth: MomoDepthView? = null
             fun find(view: View): MomoDepthView? {

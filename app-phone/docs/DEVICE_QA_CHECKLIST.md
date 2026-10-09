@@ -1,4 +1,4 @@
-# Phone Momo v1.3.0 acceptance
+# Phone Momo v1.3.1 acceptance
 
 This checklist is pending physical-phone QA. Main and watch builds are unchanged.
 
@@ -13,7 +13,13 @@ This checklist is pending physical-phone QA. Main and watch builds are unchanged
 - Text: before server hello Send is disabled. Draft remains editable offline.
   After connection, send punctuation, emoji, multiline and non-English text.
   No microphone permission or audio capture is needed; text appears once in history.
-  Server replies appear in Conversation; spoken replies still use server TTS.
+  Server replies appear in Conversation.
+- Chat/Speak selector saves immediately and survives restart without reconnecting.
+  Chat: type and send; replies appear in Conversation with no voice playback or
+  microphone permission prompt. Hardware PTT leaves volume controls alone.
+  Speak: hold to talk or type, with voice replies and visible chat history.
+  Switch to Chat during a spoken reply: audio stops immediately, remaining text
+  still arrives. Switch back to Speak: that reply stays silent; the next reply speaks.
 - If a server rejects listen/detect text, record the exact server version; the
   Xiaozhi ESP32 server supports this path, but fork-specific compatibility needs QA.
 - Voice touch and volume PTT continue to require server hello and microphone permission.

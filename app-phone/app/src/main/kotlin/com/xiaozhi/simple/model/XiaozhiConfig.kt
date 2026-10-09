@@ -7,5 +7,6 @@ data class XiaozhiConfig(
     val autoConnect: Boolean = true,
     val volumePtt: Int = 0,
     val animateAvatar: Boolean = true,
-    val depthGraphics: Boolean = false
+    val depthGraphics: Boolean = false,
+    val conversationMode: ConversationMode = ConversationMode.SPEAK
 )

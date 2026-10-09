@@ -46,7 +46,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         autoConnect = prefs.getBoolean("auto_connect", true),
         volumePtt = prefs.getInt("volume_ptt", 0),
         animateAvatar = prefs.getBoolean("animate_avatar", true),
-        depthGraphics = prefs.getBoolean("depth_graphics", false)
+        depthGraphics = prefs.getBoolean("depth_graphics", false),
+        conversationMode = ConversationMode.fromSaved(prefs.getString("conversation_mode", null))
     ))
     val config: StateFlow<XiaozhiConfig> = _config
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
@@ -74,6 +75,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var wantsConnection = _config.value.autoConnect
     private var owner: String? = null
     private var ignoreTts = false
+    private val replyAudio = ReplyAudioGate(_config.value.conversationMode)
     private val pendingTypedEchoes = java.util.ArrayDeque<String>()
 
     init {
@@ -91,12 +93,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         socket.onTtsStateChanged = { state -> viewModelScope.launch {
             if (!foreground || owner != null) return@launch
             when (state) {
-                "start" -> { ignoreTts = false; _deviceState.value = DeviceState.SPEAKING; audio.startPlayback() }
-                "stop" -> if (!ignoreTts) audio.finishPlayback()
+                "start" -> {
+                    ignoreTts = false
+                    replyAudio.start()
+                    if (replyAudio.audible) {
+                        _deviceState.value = DeviceState.SPEAKING
+                        audio.startPlayback()
+                    } else _deviceState.value = DeviceState.IDLE
+                }
+                "stop" -> {
+                    if (!ignoreTts && replyAudio.audible) audio.finishPlayback()
+                    else _deviceState.value = DeviceState.IDLE
+                    replyAudio.stop()
+                }
             }
         } }
         socket.onAudioData = { data -> viewModelScope.launch {
-            if (foreground && owner == null && !ignoreTts) {
+            if (foreground && owner == null && !ignoreTts && replyAudio.audible) {
                 _deviceState.value = DeviceState.SPEAKING
                 audio.playAudio(data)
             }
@@ -171,7 +184,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         endPtt()
         setupJob = viewModelScope.launch {
             _setupBusy.value = true
-            _setupInfo.value = "Checking your configured OTA server…"
+            _setupInfo.value = "Checking your configured OTA serverâ€¦"
             try {
                 val result = setup.fetch(cfg.otaUrl, cfg.deviceId, clientId)
                 if (config.value != cfg || !foreground) return@launch
@@ -187,9 +200,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             finally { _setupBusy.value = false }
         }
     }
-    fun stopReply() { ignoreTts = true; socket.sendAbort(); audio.stopPlayback(); if (owner == null) _deviceState.value = DeviceState.IDLE }
+    fun stopReply() { replyAudio.stop(); ignoreTts = true; socket.sendAbort(); audio.stopPlayback(); if (owner == null) _deviceState.value = DeviceState.IDLE }
+    fun setConversationMode(mode: ConversationMode) {
+        if (mode == config.value.conversationMode) return
+        if (!prefs.edit().putString("conversation_mode", mode.name).commit()) {
+            _notice.value = "Could not save conversation mode. Try again."
+            return
+        }
+        endPtt()
+        replyAudio.select(mode)
+        audio.stopPlayback()
+        _deviceState.value = DeviceState.IDLE
+        _config.value = config.value.copy(conversationMode = mode)
+    }
     fun beginPtt(source: String = "touch") {
-        if (!foreground || !focused || settingsOpen || owner != null || connectionState.value !is ConnectionState.Connected) return
+        if (config.value.conversationMode != ConversationMode.SPEAK || !foreground || !focused || settingsOpen || owner != null || connectionState.value !is ConnectionState.Connected) return
         if (ContextCompat.checkSelfPermission(getApplication(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             _notice.value = "Allow microphone access, then press and hold again."; return
         }
@@ -216,17 +241,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Abort suppresses stale audio until a fresh server TTS start.
     }
-    private fun stopInteraction() { pendingTypedEchoes.clear(); endPtt(); moodReset?.cancel(); serverMood = false; _mood.value = CompanionMood.HAPPY; ignoreTts = true; audio.stopPlayback(); _deviceState.value = DeviceState.IDLE }
+    private fun stopInteraction() { replyAudio.stop(); pendingTypedEchoes.clear(); endPtt(); moodReset?.cancel(); serverMood = false; _mood.value = CompanionMood.HAPPY; ignoreTts = true; audio.stopPlayback(); _deviceState.value = DeviceState.IDLE }
     fun handleHardwareKey(event: KeyEvent): Boolean {
         val key = config.value.volumePtt
         if (key !in listOf(KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN) ||
-            event.keyCode != key || !foreground || !focused || settingsOpen) return false
+            event.keyCode != key || config.value.conversationMode != ConversationMode.SPEAK || !foreground || !focused || settingsOpen) return false
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) beginPtt("volume")
         if (event.action == KeyEvent.ACTION_UP || event.isCanceled) endPtt("volume")
         return true
     }
     fun saveConfig(value: XiaozhiConfig): Boolean {
-        val cfg = value.copy(serverUrl = value.serverUrl.trim(), otaUrl = value.otaUrl.trim(),
+        val cfg = value.copy(conversationMode = config.value.conversationMode, serverUrl = value.serverUrl.trim(), otaUrl = value.otaUrl.trim(),
             token = value.token.trim().removePrefix("Bearer "), deviceId = value.deviceId.trim())
         fun validUrl(url: String, scheme: String) = runCatching { URI(url) }.getOrNull()?.let {
             it.scheme == scheme && !it.host.isNullOrBlank() && it.rawUserInfo == null && it.fragment == null
