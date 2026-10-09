@@ -48,19 +48,19 @@ class PhoneMomoSmokeTest {
             assertTrue(device.wait(Until.hasObject(By.text("Momo Companion")),10000))
             compose.onNodeWithText("Chat").performClick()
             compose.waitUntil(5000) {
-                compose.onNodeWithText("Text replies only Â· Momo's voice is off").isDisplayed()
+                compose.onNodeWithText("Text replies only · Momo's voice is off").isDisplayed()
             }
-            compose.onNodeWithText("Text replies only Â· Momo's voice is off").assertIsDisplayed()
+            compose.onNodeWithText("Text replies only · Momo's voice is off").assertIsDisplayed()
             scenario.recreate()
             compose.waitUntil(5000) {
-                compose.onNodeWithText("Text replies only Â· Momo's voice is off").isDisplayed()
+                compose.onNodeWithText("Text replies only · Momo's voice is off").isDisplayed()
             }
-            compose.onNodeWithText("Text replies only Â· Momo's voice is off").assertIsDisplayed()
+            compose.onNodeWithText("Text replies only · Momo's voice is off").assertIsDisplayed()
             compose.onNodeWithText("Speak").performClick()
             compose.waitUntil(5000) {
-                compose.onNodeWithText("Voice replies on Â· hold to talk or type below").isDisplayed()
+                compose.onNodeWithText("Voice replies on · hold to talk or type below").isDisplayed()
             }
-            compose.onNodeWithText("Voice replies on Â· hold to talk or type below").assertIsDisplayed()
+            compose.onNodeWithText("Voice replies on · hold to talk or type below").assertIsDisplayed()
             device.waitForIdle()
             var depth: MomoDepthView? = null
             fun find(view: View): MomoDepthView? {

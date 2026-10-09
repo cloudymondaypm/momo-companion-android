@@ -64,7 +64,7 @@ fun MainScreen(model: MainViewModel) {
         recording -> "Listening"
         state == DeviceState.SPEAKING -> "Speaking"
         connection is ConnectionState.Connected -> if (config.conversationMode == ConversationMode.CHAT) "Ready to chat" else "Ready to talk"
-        connection is ConnectionState.Connecting -> "Connectingâ€¦"
+        connection is ConnectionState.Connecting -> "Connecting…"
         connection is ConnectionState.Error -> "Connection needs attention"
         else -> "Disconnected"
     }
@@ -131,7 +131,7 @@ fun MainScreen(model: MainViewModel) {
                 }
                 TypedComposer(connected && !recording && !showSettings && !playDialog,
                     onSend = model::sendText)
-                Text(if (recording) "Microphone on Â· release to send" else "Microphone off Â· uses your configured server",
+                Text(if (recording) "Microphone on · release to send" else "Microphone off · uses your configured server",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), textAlign = TextAlign.Center)
             }
@@ -219,8 +219,8 @@ private fun TypedComposer(connected: Boolean, onSend: (String) -> Boolean) {
             onValueChange = { display.interact(); if (it.length <= TypedChat.MAX_LENGTH) draft = it },
             modifier = Modifier.weight(1f),
             label = { Text("Type to Momo") },
-            placeholder = { Text("Write a messageâ€¦") },
-            supportingText = { Text(if (connected) "No microphone needed" else "Connect to send â€¢ your draft stays here") },
+            placeholder = { Text("Write a message…") },
+            supportingText = { Text(if (connected) "No microphone needed" else "Connect to send • your draft stays here") },
             maxLines = 3,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { send() })
@@ -296,7 +296,7 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                 Button(onClick = presetConnect, modifier = Modifier.fillMaxWidth()) {
                     Text("Connect to my server")
                 }
-                Text("xiaozhi.spacecloud.space â€¢ preset address", style = MaterialTheme.typography.bodySmall)
+                Text("xiaozhi.spacecloud.space • preset address", style = MaterialTheme.typography.bodySmall)
                 Text("Display auto-off", style = MaterialTheme.typography.titleMedium)
                 Text("After inactivity Momo goes dark; Android controls physical sleep.",
                     style = MaterialTheme.typography.bodySmall)
@@ -312,7 +312,7 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                 OutlinedTextField(ota, { display.interact(); ota = it }, Modifier.fillMaxWidth(), label = { Text("OTA address") }, singleLine = true,
                     supportingText = { Text("Optional connection setup only. No firmware downloads. Save changed addresses before requesting setup.") })
                 OutlinedButton(onClick = getSetup, enabled = !setupBusy, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (setupBusy) "Checking serverâ€¦" else "Get server setup")
+                    Text(if (setupBusy) "Checking server…" else "Get server setup")
                 }
                 if (setupInfo.isNotBlank()) Text(setupInfo, style = MaterialTheme.typography.bodySmall)
                 OutlinedTextField(token, { display.interact(); token = it }, Modifier.fillMaxWidth(), label = { Text("Bearer token (optional)") },

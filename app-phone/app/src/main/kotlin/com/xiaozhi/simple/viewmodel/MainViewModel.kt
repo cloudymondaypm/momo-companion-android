@@ -184,7 +184,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         endPtt()
         setupJob = viewModelScope.launch {
             _setupBusy.value = true
-            _setupInfo.value = "Checking your configured OTA serverâ€¦"
+            _setupInfo.value = "Checking your configured OTA server…"
             try {
                 val result = setup.fetch(cfg.otaUrl, cfg.deviceId, clientId)
                 if (config.value != cfg || !foreground) return@launch
