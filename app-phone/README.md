@@ -98,3 +98,22 @@ Android client: MIT, see LICENSE (original attribution retained).
 Bundled libopus 1.5.2 has its own license at
 `app/src/main/cpp/opus-1.5.2/COPYING`. Momo is an original code-drawn avatar;
 no third-party character image assets are required.
+
+
+## Momo phone v1.3.0
+
+The phone now uses the same watch character, touch reactions, wardrobe and four
+offline games with saved stars. The same app-only idle display timeout defaults
+to 2 minutes and is adjustable in Settings. Android owns physical screen sleep.
+
+Settings has **Connect to my server** for the prefilled Spacecloud endpoints.
+**Type to Momo** sends text directly through Xiaozhi's listen/detect path;
+microphone permission is unnecessary. Voice PTT remains available when connected.
+
+Optional **3D depth view** adds an OpenGL textured relief mesh and soft lighting
+to the exact watch artwork. This is a front-facing relief rather than a fully
+rotatable character. Classic high-resolution vector graphics are the default.
+No downloaded model or remote graphics service is needed.
+
+Physical-phone acceptance remains pending:
+[phone QA checklist](docs/DEVICE_QA_CHECKLIST.md).

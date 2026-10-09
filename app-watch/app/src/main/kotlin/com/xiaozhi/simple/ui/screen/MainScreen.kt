@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
@@ -51,6 +52,8 @@ import com.xiaozhi.simple.model.ConnectionState
 import com.xiaozhi.simple.model.DeviceState
 import com.xiaozhi.simple.model.MessageType
 import com.xiaozhi.simple.model.XiaozhiConfig
+import com.xiaozhi.simple.display.*
+import com.xiaozhi.simple.model.WatchAvailability
 import com.xiaozhi.simple.model.AvatarMood
 import com.xiaozhi.simple.ui.avatar.*
 import kotlinx.coroutines.delay
@@ -62,13 +65,13 @@ import com.xiaozhi.simple.viewmodel.MainViewModel
 fun MainScreen(viewModel: MainViewModel) {
     val micPermission = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
 
-    LaunchedEffect(Unit) {
-        if (!micPermission.status.isGranted) micPermission.launchPermissionRequest()
-    }
+    val display = LocalWatchDisplay.current
+    val displaySleeping by display.sleeping.collectAsState()
 
     val messages by viewModel.messages.collectAsState()
     val deviceState by viewModel.deviceState.collectAsState()
     val connectionState by viewModel.connectionState.collectAsState()
+    val canTalk = WatchAvailability.canTalk(connectionState)
     val avatarMood by viewModel.avatarMood.collectAsState()
     val awaitingReply by viewModel.awaitingReply.collectAsState()
     val connectionMessage by viewModel.connectionMessage.collectAsState()
@@ -101,6 +104,13 @@ fun MainScreen(viewModel: MainViewModel) {
     var reactionMessage by remember { mutableStateOf("") }
     var game by remember { mutableStateOf(AvatarGame.NONE) }
     var gameProgress by remember { mutableIntStateOf(0) }
+    var momoSequence by remember { mutableStateOf(AvatarGames.targets) }
+    // All rewards are on-device, offline and never tied to purchases.
+    var stars by remember { mutableIntStateOf(wardrobePrefs.getInt("game_stars", 0).coerceAtLeast(0)) }
+    val awardStar: () -> Unit = {
+        stars += 1
+        wardrobePrefs.edit().putInt("game_stars", stars).apply()
+    }
 
     // Each reaction is fleeting. Does not interfere with the voice mood or server connection.
     LaunchedEffect(reactionTick) {
@@ -114,29 +124,65 @@ fun MainScreen(viewModel: MainViewModel) {
         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         reaction = AvatarTouch.reaction(part)
         reactionMessage = reaction.caption
-        when (game) {
-            AvatarGame.MOMO_SAYS -> {
-                if (part == AvatarGames.targets.getOrNull(gameProgress)) {
-                    gameProgress++
+        if (game != AvatarGame.NONE) {
+            val activeGame = game
+            val move = AvatarGames.move(activeGame, gameProgress, part, momoSequence)
+            gameProgress = move.progress
+            when {
+                move.completed -> {
+                    game = AvatarGame.NONE
+                    awardStar()
+                    reaction = AvatarReaction.CELEBRATE
+                    reactionMessage = when (activeGame) {
+                        AvatarGame.MOMO_SAYS -> "You won Momo Says! ⭐"
+                        AvatarGame.TICKLE_RACE -> "Tickle champion! 🎉"
+                        AvatarGame.DANCE_PARTY -> "Dance star! You did it! 🎵"
+                        AvatarGame.HUG_TIME -> "Super hug champion! 💗"
+                        AvatarGame.NONE -> ""
+                    }
+                }
+                !move.accepted -> reactionMessage = when (activeGame) {
+                    AvatarGame.MOMO_SAYS -> "Try my ${momoSequence.getOrNull(gameProgress)?.label ?: "head"}!"
+                    AvatarGame.TICKLE_RACE -> "Find my belly! 😆"
+                    AvatarGame.DANCE_PARTY -> "Next: ${AvatarGames.danceSteps.getOrNull(gameProgress)?.label ?: "feet"}!"
+                    AvatarGame.HUG_TIME -> "Hold Momo to cuddle!"
+                    AvatarGame.NONE -> ""
+                }
+                activeGame == AvatarGame.MOMO_SAYS -> {
                     reaction = AvatarReaction.CELEBRATE
                     reactionMessage = "Great job!"
-                    if (gameProgress >= AvatarGames.targets.size) {
-                        game = AvatarGame.NONE
-                        reactionMessage = "You won Momo Says! ⭐"
-                    }
-                } else reactionMessage = "Oops! Try my ${AvatarGames.targets[gameProgress].label}!"
+                }
+                activeGame == AvatarGame.TICKLE_RACE ->
+                    reactionMessage = "Heehee! ${AvatarGames.TICKLE_GOAL - gameProgress} more!"
+                activeGame == AvatarGame.DANCE_PARTY -> {
+                    reaction = AvatarReaction.DANCE
+                    reactionMessage = "Nice move! Keep dancing!"
+                }
             }
-            AvatarGame.TICKLE_RACE -> {
-                if (part == AvatarPart.BELLY) {
-                    gameProgress++
-                    if (gameProgress >= AvatarGames.TICKLE_GOAL) {
-                        game = AvatarGame.NONE
-                        reaction = AvatarReaction.CELEBRATE
-                        reactionMessage = "Tickle champion! 🎉"
-                    } else reactionMessage = "Heehee! ${AvatarGames.TICKLE_GOAL - gameProgress} more!"
-                } else reactionMessage = "Find my belly! 😆"
+        }
+        reactionTick++
+    }
+    val petMomo: (AvatarPart) -> Unit = { part ->
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        reaction = AvatarTouch.reaction(part)
+        reactionMessage = AvatarTouch.strokeCaption(part)
+        reactionTick++
+    }
+    val cuddleMomo: () -> Unit = {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        reaction = AvatarReaction.CUDDLE
+        reactionMessage = AvatarReaction.CUDDLE.caption
+        if (game == AvatarGame.HUG_TIME) {
+            val move = AvatarGames.move(game, gameProgress, null, momoSequence)
+            gameProgress = move.progress
+            if (move.completed) {
+                game = AvatarGame.NONE
+                awardStar()
+                reaction = AvatarReaction.CELEBRATE
+                reactionMessage = "Super hug champion! 💗"
+            } else {
+                reactionMessage = "Bunny hug! ${AvatarGames.HUG_GOAL - gameProgress} more!"
             }
-            AvatarGame.NONE -> Unit
         }
         reactionTick++
     }
@@ -149,13 +195,37 @@ fun MainScreen(viewModel: MainViewModel) {
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
-    val mood = when {
-        deviceState == DeviceState.LISTENING -> AvatarMood.LISTENING
-        connectionState is ConnectionState.Connecting || awaitingReply -> AvatarMood.THINKING
-        connectionState !is ConnectionState.Connected -> AvatarMood.SLEEPY
-        else -> avatarMood
+    val mood = WatchAvailability.mood(connectionState, deviceState, awaitingReply, avatarMood)
+
+    // Every touch resets the idle timer; nothing runs in the background, dialogs,
+    // voice sessions, active games or reduced-motion mode. No network calls.
+    LaunchedEffect(foreground, displaySleeping, showSettings, showWardrobe, showGames, config.reduceMotion,
+        deviceState, awaitingReply, connectionState is ConnectionState.Connecting,
+        game, reactionTick) {
+        val allowed = AvatarIdle.canSurprise(
+            foreground = foreground && !displaySleeping,
+            dialogOpen = showSettings || showWardrobe || showGames,
+            reducedMotion = config.reduceMotion,
+            voiceBusy = canTalk && (deviceState != DeviceState.IDLE || awaitingReply),
+            gameActive = game != AvatarGame.NONE
+        )
+        if (allowed) {
+            delay(AvatarIdle.SURPRISE_DELAY_MS)
+            val surprise = AvatarIdle.nextSurprise(reactionTick)
+            reaction = surprise
+            reactionMessage = surprise.caption
+            reactionTick++
+        }
     }
 
+    // Keep the next step visible even while Momo giggles or celebrates.
+    val gameInstruction = when (game) {
+        AvatarGame.MOMO_SAYS -> "Tap ${momoSequence.getOrNull(gameProgress)?.label ?: "head"} · ${gameProgress + 1}/${momoSequence.size}"
+        AvatarGame.TICKLE_RACE -> "Belly taps · ${gameProgress}/${AvatarGames.TICKLE_GOAL}"
+        AvatarGame.DANCE_PARTY -> "Dance ${AvatarGames.danceSteps.getOrNull(gameProgress)?.label ?: "feet"} · ${gameProgress + 1}/${AvatarGames.danceSteps.size}"
+        AvatarGame.HUG_TIME -> "Hold to hug · ${gameProgress}/${AvatarGames.HUG_GOAL}"
+        AvatarGame.NONE -> ""
+    }
     val latestText = messages.lastOrNull()?.content.orEmpty()
     val latestIsUser = messages.lastOrNull()?.type == MessageType.USER
 
@@ -210,11 +280,15 @@ fun MainScreen(viewModel: MainViewModel) {
                     )
                 }
 
-                IconButton(
-                    onClick = { viewModel.onPressEnd(); showSettings = true },
-                    modifier = Modifier.size(if (compact) 32.dp else 40.dp)
-                ) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color(0xFF75668B))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("⭐ $stars", color = Color(0xFF85622A),
+                        fontSize = if (compact) 10.sp else 12.sp)
+                    IconButton(
+                        onClick = { viewModel.onPressEnd(); showSettings = true },
+                        modifier = Modifier.size(if (compact) 32.dp else 40.dp)
+                    ) {
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color(0xFF75668B))
+                    }
                 }
             }
 
@@ -228,26 +302,39 @@ fun MainScreen(viewModel: MainViewModel) {
                 contentAlignment = Alignment.Center
             ) {
                 MomoAvatar(mood, speaking = deviceState == DeviceState.SPEAKING,
-                    animated = foreground && !showSettings && !showWardrobe &&
+                    animated = foreground && !displaySleeping && !showSettings && !showWardrobe &&
                         !showGames && !config.reduceMotion,
                     reaction = reaction, reactionTick = reactionTick,
                     style = AvatarStyle(outfit, accessory),
-                    onTouch = touchMomo, modifier = Modifier.fillMaxSize())
+                    onTouch = touchMomo, onPet = petMomo, onCuddle = cuddleMomo,
+                    modifier = Modifier.fillMaxSize())
             }
             Text("Momo", color = Color(0xFF71608C), fontWeight = FontWeight.Bold,
                 fontSize = if (compact) 12.sp else 16.sp)
             Text(
                 text = when {
+                    game != AvatarGame.NONE -> gameInstruction
                     reactionMessage.isNotBlank() -> reactionMessage
-                    game == AvatarGame.MOMO_SAYS ->
-                        "Momo says: touch my ${AvatarGames.targets[gameProgress].label}!"
-                    game == AvatarGame.TICKLE_RACE ->
-                        "Tickle my belly! ${gameProgress}/${AvatarGames.TICKLE_GOAL}"
                     deviceState == DeviceState.SPEAKING && mood == AvatarMood.HAPPY -> "Let's chat!"
                     else -> mood.caption
                 },
                 color = Color(0xFF56656D), fontSize = if (compact) 10.sp else 12.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (game != AvatarGame.NONE) {
+                val totalSteps = when (game) {
+                    AvatarGame.MOMO_SAYS -> momoSequence.size
+                    AvatarGame.TICKLE_RACE -> AvatarGames.TICKLE_GOAL
+                    AvatarGame.DANCE_PARTY -> AvatarGames.danceSteps.size
+                    AvatarGame.HUG_TIME -> AvatarGames.HUG_GOAL
+                    AvatarGame.NONE -> 1
+                }
+                LinearProgressIndicator(
+                    progress = { (gameProgress.toFloat() / totalSteps.coerceAtLeast(1)).coerceIn(0f, 1f) },
+                    modifier = Modifier.fillMaxWidth(0.78f).height(3.dp),
+                    color = Color(0xFF7756A6),
+                    trackColor = Color(0xFFEADCF5)
+                )
+            }
             Spacer(Modifier.height(3.dp))
 
             // Dedicated press-and-hold microphone. Tapping Momo never records audio.
@@ -262,22 +349,40 @@ fun MainScreen(viewModel: MainViewModel) {
                     contentPadding = PaddingValues(0.dp)
                 ) { Text("Dress", fontSize = if (compact) 10.sp else 12.sp) }
                 OutlinedButton(
-                    onClick = { viewModel.onPressEnd(); showGames = true },
+                    onClick = {
+                        viewModel.onPressEnd()
+                        if (game == AvatarGame.NONE) {
+                            showGames = true
+                        } else {
+                            game = AvatarGame.NONE
+                            gameProgress = 0
+                            reaction = AvatarReaction.NONE
+                            reactionMessage = "Game stopped. Let's play again!"
+                            reactionTick++
+                        }
+                    },
                     modifier = Modifier.weight(1f).height(44.dp),
                     contentPadding = PaddingValues(0.dp)
-                ) { Text("Play", fontSize = if (compact) 10.sp else 12.sp) }
+                ) { Text(if (game == AvatarGame.NONE) "Play" else "Stop",
+                    fontSize = if (compact) 10.sp else 12.sp) }
                 Box(
                     modifier = Modifier
                         .width(if (compact) 90.dp else 108.dp)
                         .height(44.dp)
                         .background(
                             if (deviceState == DeviceState.LISTENING) Color(0xFF318D73)
-                            else Color(0xFF7756A6), RoundedCornerShape(24.dp)
+                            else if (canTalk) Color(0xFF7756A6) else Color.Gray, RoundedCornerShape(24.dp)
                         )
-                        .semantics { contentDescription = "Hold to talk to Momo; release to send" }
-                        .pointerInput(viewModel, micPermission.status.isGranted) {
+                        .semantics {
+                            contentDescription = if (canTalk) "Hold to talk to Momo; release to send"
+                                else "Talk unavailable: connect to server in Settings"
+                            if (!canTalk) disabled()
+                        }
+                        .pointerInput(viewModel, micPermission.status.isGranted, canTalk) {
                             detectTapGestures(onPress = {
-                                if (!micPermission.status.isGranted) {
+                                if (!canTalk) {
+                                    // Local play remains available; offline taps never request a microphone.
+                                } else if (!micPermission.status.isGranted) {
                                     micPermission.launchPermissionRequest()
                                 } else {
                                     viewModel.onPressStart()
@@ -288,7 +393,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        if (deviceState == DeviceState.LISTENING) "Release" else "🎙 Talk",
+                        if (!canTalk) "Talk offline" else if (deviceState == DeviceState.LISTENING) "Release" else "🎙 Talk",
                         color = Color.White, fontWeight = FontWeight.Bold,
                         fontSize = if (compact) 11.sp else 13.sp
                     )
@@ -299,6 +404,8 @@ fun MainScreen(viewModel: MainViewModel) {
             Text(
                 text = when {
                     keyLearning -> "Press a physical button"
+                    game != AvatarGame.NONE && reactionMessage.isNotBlank() -> reactionMessage
+                    !canTalk -> "Play & Dress offline • connect in ⚙ to talk"
                     pttKeyCode == KeyEvent.KEYCODE_UNKNOWN -> "Hold 🎙 to talk • side button in ⚙"
                     deviceState == DeviceState.LISTENING -> "Release to send"
                     else -> "Hold 🎙 or side button to talk"
@@ -346,9 +453,15 @@ fun MainScreen(viewModel: MainViewModel) {
             onStart = {
                 game = it
                 gameProgress = 0
+                if (it == AvatarGame.MOMO_SAYS) momoSequence = AvatarGames.targets.shuffled()
                 reaction = AvatarReaction.CELEBRATE
-                reactionMessage = if (it == AvatarGame.MOMO_SAYS)
-                    "Momo says: touch my head!" else "Tickle my belly 8 times!"
+                reactionMessage = when (it) {
+                    AvatarGame.MOMO_SAYS -> "Momo says: touch my ${momoSequence.first().label}!"
+                    AvatarGame.TICKLE_RACE -> "Tickle my belly 8 times!"
+                    AvatarGame.DANCE_PARTY -> "Dance! Tap my ${AvatarGames.danceSteps.first().label}!"
+                    AvatarGame.HUG_TIME -> "Hold Momo to hug 3 times!"
+                    AvatarGame.NONE -> ""
+                }
                 reactionTick++
                 showGames = false
             },
@@ -374,6 +487,11 @@ fun MainScreen(viewModel: MainViewModel) {
             onHardwareKey = { viewModel.handleHardwareKey(it) },
             onLearnButton = { viewModel.startButtonLearning() },
             onClearButton = { viewModel.clearPttButton() },
+            onPresetConnect = {
+                viewModel.cancelButtonLearning()
+                viewModel.connectToPresetServer()
+                showSettings = false
+            },
             onReconnect = { viewModel.connect() },
             onDisconnect = { viewModel.disconnect() },
             onDismiss = {
@@ -381,7 +499,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 showSettings = false
             },
             onSave = {
-                viewModel.saveConfigAndReconnect(it)
+                viewModel.saveConfig(it)
                 showSettings = false
             }
         )
@@ -401,6 +519,7 @@ private fun WatchSettingsDialog(
     onHardwareKey: (KeyEvent) -> Boolean,
     onLearnButton: () -> Unit,
     onClearButton: () -> Unit,
+    onPresetConnect: () -> Unit,
     onReconnect: () -> Unit,
     onDisconnect: () -> Unit,
     onDismiss: () -> Unit,
@@ -413,11 +532,14 @@ private fun WatchSettingsDialog(
     var otaUrl by remember(config.otaUrl) { mutableStateOf(config.otaUrl) }
     var reduceMotion by remember(config.reduceMotion) { mutableStateOf(config.reduceMotion) }
     val keyFocus = remember { FocusRequester() }
+    val display = LocalWatchDisplay.current
+    val timeoutSeconds by display.timeoutSeconds.collectAsState()
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        BindWatchDialog()
         Surface(
             modifier = Modifier
                 .fillMaxSize()
@@ -449,6 +571,29 @@ private fun WatchSettingsDialog(
                     }
                 }
 
+                Button(onClick = onPresetConnect, modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)) {
+                    Text("Connect to my server", fontSize = 12.sp)
+                }
+                Text("xiaozhi.spacecloud.space • no URL typing",
+                    style = MaterialTheme.typography.bodySmall)
+                Text("Uses saved token and pairing. Bind in your server console if asked.",
+                    style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider()
+                Text("Display auto-off", fontWeight = FontWeight.SemiBold)
+                Text("After inactivity, Momo goes dark. Android controls physical sleep.",
+                    style = MaterialTheme.typography.bodySmall)
+                WatchDisplayController.TIMEOUT_OPTIONS.forEach { seconds ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = timeoutSeconds == seconds,
+                            onClick = { display.setTimeout(seconds) })
+                        Text(if (seconds < 60) "$seconds seconds"
+                            else "${seconds / 60} minutes")
+                    }
+                }
+                Text("Display choice saves immediately. Tap the dark screen to wake Momo; use the power button if Android has slept.",
+                    style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider()
                 if (connectionMessage.isNotBlank()) {
                     Text(connectionMessage, style = MaterialTheme.typography.bodySmall)
                 }
@@ -561,7 +706,7 @@ private fun WatchSettingsDialog(
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Save & reconnect")
+                    Text("Save")
                 }
             }
         }
@@ -578,13 +723,22 @@ private fun MomoWardrobeDialog(
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        BindWatchDialog()
         Surface(modifier = Modifier.fillMaxSize().padding(8.dp),
             shape = MaterialTheme.shapes.large) {
             Column(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
+                Text("Saved on this watch • works offline", fontSize = 11.sp)
                 Text("Momo's wardrobe", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Box(Modifier.fillMaxWidth().height(118.dp), contentAlignment = Alignment.Center) {
+                    MomoAvatar(
+                        mood = AvatarMood.HAPPY, speaking = false, animated = false,
+                        style = AvatarStyle(outfit, accessory),
+                        modifier = Modifier.size(114.dp)
+                    )
+                }
                 Text("Choose an outfit", fontSize = 12.sp)
                 AvatarOutfit.entries.chunked(2).forEach { pair ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -636,12 +790,14 @@ private fun MomoGamesDialog(
     onDismiss: () -> Unit
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        BindWatchDialog()
         Surface(modifier = Modifier.fillMaxSize().padding(8.dp),
             shape = MaterialTheme.shapes.large) {
             Column(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Text("All four games work offline.", fontSize = 11.sp)
                 Text("Play with Momo", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Text("Momo Says: touch the body part Momo names (5 rounds).",
                     fontSize = 11.sp)
@@ -651,6 +807,12 @@ private fun MomoGamesDialog(
                     fontSize = 11.sp)
                 Button(onClick = { onStart(AvatarGame.TICKLE_RACE) },
                     modifier = Modifier.fillMaxWidth()) { Text("Play Tickle Race") }
+                Text("Dance Party: follow six different body-part dance steps.", fontSize = 11.sp)
+                Button(onClick = { onStart(AvatarGame.DANCE_PARTY) },
+                    modifier = Modifier.fillMaxWidth()) { Text("Play Dance Party") }
+                Text("Hug Time: hold Momo to cuddle three times!", fontSize = 11.sp)
+                Button(onClick = { onStart(AvatarGame.HUG_TIME) },
+                    modifier = Modifier.fillMaxWidth()) { Text("Play Hug Time") }
                 if (activeGame != AvatarGame.NONE) {
                     OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
                         Text("Stop game")

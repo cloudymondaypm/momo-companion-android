@@ -14,6 +14,34 @@ jobs:
         with: {distribution: temurin, java-version: '17', cache: gradle}
       - name: Install Android components
         run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 'platforms;android-34' 'build-tools;34.0.0' 'ndk;25.1.8937393' 'cmake;3.22.1'
+      # Never expose signing secrets to PR jobs or ordinary feature-branch pushes.
+      # Configure the four repository Actions secrets documented in README.
+      - name: Restore optional persistent signer
+        if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+        shell: bash
+        env:
+          WATCH_KEYSTORE_BASE64: ${{ secrets.MOMO_WATCH_SIGNING_KEYSTORE_BASE64 }}
+          WATCH_STORE_PASSWORD: ${{ secrets.MOMO_WATCH_SIGNING_STORE_PASSWORD }}
+          WATCH_KEY_ALIAS: ${{ secrets.MOMO_WATCH_SIGNING_KEY_ALIAS }}
+          WATCH_KEY_PASSWORD: ${{ secrets.MOMO_WATCH_SIGNING_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$WATCH_KEYSTORE_BASE64" && -z "$WATCH_STORE_PASSWORD" && -z "$WATCH_KEY_ALIAS" && -z "$WATCH_KEY_PASSWORD" ]]; then
+            echo 'No persistent watch signer configured; using the ephemeral debug signer.'
+          else
+            if [[ -z "$WATCH_KEYSTORE_BASE64" || -z "$WATCH_STORE_PASSWORD" || -z "$WATCH_KEY_ALIAS" || -z "$WATCH_KEY_PASSWORD" ]]; then
+              echo 'Incomplete watch signing secrets. Refusing to build with ambiguous signing.' >&2
+              exit 1
+            fi
+            printf '%s' "$WATCH_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/momo-watch-signing.jks"
+            echo "MOMO_WATCH_KEYSTORE_PATH=$RUNNER_TEMP/momo-watch-signing.jks" >> "$GITHUB_ENV"
+            echo "MOMO_WATCH_KEYSTORE_PASSWORD=$WATCH_STORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "MOMO_WATCH_KEY_ALIAS=$WATCH_KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "MOMO_WATCH_KEY_PASSWORD=$WATCH_KEY_PASSWORD" >> "$GITHUB_ENV"
+            echo 'Persistent signing enabled for trusted watch APK build.'
+          fi
       - run: chmod +x app-watch/gradlew && ./app-watch/gradlew -p app-watch assembleDebug testDebugUnitTest
       - uses: actions/upload-artifact@v4
         with: {name: momo-companion-watch-debug, path: app-watch/app/build/outputs/apk/debug/*.apk, if-no-files-found: error}
+      - name: Remove signing key from runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/momo-watch-signing.jks"

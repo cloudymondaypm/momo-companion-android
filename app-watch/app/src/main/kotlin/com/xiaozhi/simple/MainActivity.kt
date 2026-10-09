@@ -2,7 +2,8 @@ package com.xiaozhi.simple
 
 import android.os.Bundle
 import android.view.KeyEvent
-import android.view.WindowManager
+import com.xiaozhi.simple.display.*
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,12 +25,14 @@ import com.xiaozhi.simple.viewmodel.MainViewModel
  */
 class MainActivity : ComponentActivity() {
     private lateinit var viewModel: MainViewModel
+    private lateinit var display: WatchDisplayController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
+        display = WatchDisplayController(this) { viewModel.onPressEnd() }
+        display.attach(window)
 
         setContent {
             MomoCompanionTheme {
@@ -37,13 +40,27 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MainScreen(viewModel = viewModel)
+                    CompositionLocalProvider(LocalWatchDisplay provides display) {
+                        MainScreen(viewModel = viewModel)
+                        WatchSleepScreen(display)
+                    }
                 }
             }
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        display.resume()
+    }
+
+    override fun onDestroy() {
+        display.close()
+        super.onDestroy()
+    }
+
     override fun onPause() {
+        display.pause()
         if (::viewModel.isInitialized) viewModel.onPressEnd()
         super.onPause()
     }

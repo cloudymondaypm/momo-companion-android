@@ -45,7 +45,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         token = tokens.read(), deviceId = defaultDeviceId,
         autoConnect = prefs.getBoolean("auto_connect", true),
         volumePtt = prefs.getInt("volume_ptt", 0),
-        animateAvatar = prefs.getBoolean("animate_avatar", true)
+        animateAvatar = prefs.getBoolean("animate_avatar", true),
+        depthGraphics = prefs.getBoolean("depth_graphics", false),
+        conversationMode = ConversationMode.fromSaved(prefs.getString("conversation_mode", null))
     ))
     val config: StateFlow<XiaozhiConfig> = _config
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
@@ -73,6 +75,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var wantsConnection = _config.value.autoConnect
     private var owner: String? = null
     private var ignoreTts = false
+    private val replyAudio = ReplyAudioGate(_config.value.conversationMode)
+    private val pendingTypedEchoes = java.util.ArrayDeque<String>()
 
     init {
         socket.onEmotion = { raw -> viewModelScope.launch {
@@ -81,18 +85,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
         } }
         socket.onSttMessage = { text -> viewModelScope.launch {
-            if (foreground) { textMood(text); addMessage(Message(type = MessageType.USER, content = text)) }
+            if (foreground) {
+                if (!pendingTypedEchoes.remove(text.trim())) { textMood(text); addMessage(Message(type = MessageType.USER, content = text)) }
+            }
         } }
         socket.onTextMessage = { text -> viewModelScope.launch { if (!ignoreTts) { textMood(text, reply = true); addMessage(Message(type = MessageType.AI, content = text)) } } }
         socket.onTtsStateChanged = { state -> viewModelScope.launch {
             if (!foreground || owner != null) return@launch
             when (state) {
-                "start" -> { ignoreTts = false; _deviceState.value = DeviceState.SPEAKING; audio.startPlayback() }
-                "stop" -> if (!ignoreTts) audio.finishPlayback()
+                "start" -> {
+                    ignoreTts = false
+                    replyAudio.start()
+                    if (replyAudio.audible) {
+                        _deviceState.value = DeviceState.SPEAKING
+                        audio.startPlayback()
+                    } else _deviceState.value = DeviceState.IDLE
+                }
+                "stop" -> {
+                    if (!ignoreTts && replyAudio.audible) audio.finishPlayback()
+                    else _deviceState.value = DeviceState.IDLE
+                    replyAudio.stop()
+                }
             }
         } }
         socket.onAudioData = { data -> viewModelScope.launch {
-            if (foreground && owner == null && !ignoreTts) {
+            if (foreground && owner == null && !ignoreTts && replyAudio.audible) {
                 _deviceState.value = DeviceState.SPEAKING
                 audio.playAudio(data)
             }
@@ -126,6 +143,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         socket.connect(cfg.serverUrl, cfg.deviceId, clientId, cfg.token)
     }
     fun disconnect() { wantsConnection = false; stopInteraction(); socket.disconnect() }
+    fun connectToPresetServer() {
+        if (saveConfig(config.value.copy(
+            serverUrl = XiaozhiConfig().serverUrl, otaUrl = XiaozhiConfig().otaUrl))) connect()
+    }
+    /** Typing needs the server, but has no microphone-permission dependency. */
+    fun sendText(text: String): Boolean {
+        if (!foreground || !focused || settingsOpen ||
+            connectionState.value !is ConnectionState.Connected || !TypedChat.valid(text)) {
+            _notice.value = "Connect to the server to send a message (up to 2000 characters)."
+            return false
+        }
+        endPtt()
+        stopReply()
+        if (!socket.sendText(text)) {
+            _notice.value = "Message was not sent. Reconnect and try again."
+            return false
+        }
+        val sent = text.trim()
+        pendingTypedEchoes.addLast(sent)
+        while (pendingTypedEchoes.size > 100) pendingTypedEchoes.removeFirst()
+        // Keep stale playback suppressed until the server starts the new TTS reply.
+        serverMood = false
+        textMood(sent)
+        addMessage(Message(type = MessageType.USER, content = sent))
+        _notice.value = ""
+        _mood.value = CompanionMood.THINKING
+        moodReset?.cancel()
+        moodReset = viewModelScope.launch {
+            delay(20000)
+            if (_mood.value == CompanionMood.THINKING) _mood.value = CompanionMood.HAPPY
+        }
+        return true
+    }
+
     fun clearMessages() { _messages.value = emptyList() }
     fun getServerSetup() {
         if (_setupBusy.value) return
@@ -149,12 +200,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             finally { _setupBusy.value = false }
         }
     }
-    fun stopReply() { ignoreTts = true; socket.sendAbort(); audio.stopPlayback(); if (owner == null) _deviceState.value = DeviceState.IDLE }
+    fun stopReply() { replyAudio.stop(); ignoreTts = true; socket.sendAbort(); audio.stopPlayback(); if (owner == null) _deviceState.value = DeviceState.IDLE }
+    fun setConversationMode(mode: ConversationMode) {
+        if (mode == config.value.conversationMode) return
+        if (!prefs.edit().putString("conversation_mode", mode.name).commit()) {
+            _notice.value = "Could not save conversation mode. Try again."
+            return
+        }
+        endPtt()
+        replyAudio.select(mode)
+        audio.stopPlayback()
+        _deviceState.value = DeviceState.IDLE
+        _config.value = config.value.copy(conversationMode = mode)
+    }
     fun beginPtt(source: String = "touch") {
-        if (!foreground || !focused || settingsOpen || owner != null || connectionState.value !is ConnectionState.Connected) return
+        if (config.value.conversationMode != ConversationMode.SPEAK || !foreground || !focused || settingsOpen || owner != null || connectionState.value !is ConnectionState.Connected) return
         if (ContextCompat.checkSelfPermission(getApplication(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             _notice.value = "Allow microphone access, then press and hold again."; return
         }
+        pendingTypedEchoes.clear()
         stopReply()
         moodReset?.cancel(); serverMood = false; _mood.value = CompanionMood.CURIOUS
         _notice.value = ""
@@ -177,17 +241,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
         // Abort suppresses stale audio until a fresh server TTS start.
     }
-    private fun stopInteraction() { endPtt(); moodReset?.cancel(); serverMood = false; _mood.value = CompanionMood.HAPPY; ignoreTts = true; audio.stopPlayback(); _deviceState.value = DeviceState.IDLE }
+    private fun stopInteraction() { replyAudio.stop(); pendingTypedEchoes.clear(); endPtt(); moodReset?.cancel(); serverMood = false; _mood.value = CompanionMood.HAPPY; ignoreTts = true; audio.stopPlayback(); _deviceState.value = DeviceState.IDLE }
     fun handleHardwareKey(event: KeyEvent): Boolean {
         val key = config.value.volumePtt
         if (key !in listOf(KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN) ||
-            event.keyCode != key || !foreground || !focused || settingsOpen) return false
+            event.keyCode != key || config.value.conversationMode != ConversationMode.SPEAK || !foreground || !focused || settingsOpen) return false
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) beginPtt("volume")
         if (event.action == KeyEvent.ACTION_UP || event.isCanceled) endPtt("volume")
         return true
     }
     fun saveConfig(value: XiaozhiConfig): Boolean {
-        val cfg = value.copy(serverUrl = value.serverUrl.trim(), otaUrl = value.otaUrl.trim(),
+        val cfg = value.copy(conversationMode = config.value.conversationMode, serverUrl = value.serverUrl.trim(), otaUrl = value.otaUrl.trim(),
             token = value.token.trim().removePrefix("Bearer "), deviceId = value.deviceId.trim())
         fun validUrl(url: String, scheme: String) = runCatching { URI(url) }.getOrNull()?.let {
             it.scheme == scheme && !it.host.isNullOrBlank() && it.rawUserInfo == null && it.fragment == null
@@ -201,12 +265,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             tokens.write(cfg.token)
             check(prefs.edit().putString("server_url", cfg.serverUrl).putString("ota_url", cfg.otaUrl)
                 .putString("device_id", cfg.deviceId).putBoolean("auto_connect", cfg.autoConnect)
-                .putInt("volume_ptt", cfg.volumePtt).putBoolean("animate_avatar", cfg.animateAvatar).commit())
-            stopInteraction(); socket.disconnect()
+                .putInt("volume_ptt", cfg.volumePtt).putBoolean("animate_avatar", cfg.animateAvatar)
+                .putBoolean("depth_graphics", cfg.depthGraphics).commit())
+            val reconnect = cfg.serverUrl != config.value.serverUrl ||
+                cfg.otaUrl != config.value.otaUrl || cfg.token != config.value.token ||
+                cfg.deviceId != config.value.deviceId
+            if (reconnect) { stopInteraction(); socket.disconnect() }
             _config.value = cfg
             _notice.value = ""
-            wantsConnection = true
-            connect()
+            if (reconnect) { wantsConnection = true; connect() }
             true
         } catch (_: Exception) { _notice.value = "Settings could not be saved securely. Try again."; false }
     }

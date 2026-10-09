@@ -11,8 +11,8 @@ android {
         applicationId = "space.spacecloud.xiaozhi.fold5"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.0-momo"
+        versionCode = 5
+        versionName = "1.3.1-momo"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild { cmake { arguments += "-DANDROID_STL=none" } }
@@ -38,6 +38,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.10" }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
@@ -56,8 +57,14 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.12.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation("androidx.test:runner:1.5.2")
+    androidTestImplementation("androidx.test:core-ktx:1.5.0")
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
 }
 

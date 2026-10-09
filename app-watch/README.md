@@ -2,24 +2,26 @@
 
 Momo Companion is a small-screen Xiaozhi Android client for the Kiumo ZH23-YL-RF watch, with a pettable, dressable mint bunny and a dedicated hold-to-talk button.
 
-Version: **0.3.0-momo-companion** (version code 15). Package: `com.kiumo.xiaozhi`.
+Version: **0.4.6-momo-companion** (version code 22). Package: `com.kiumo.xiaozhi`.
 
 ![Momo expressions](docs/Momo-Expressions.png)
 
 ## Features
 
+- App-only display idle timeout: default 2 minutes, adjustable to 30 seconds, 1, 2, 5 or 10 minutes in Settings. On expiry Momo goes black, app brightness drops to minimum and Android controls physical sleep. No global settings are changed. See [display policy and hardware limitation](docs/DISPLAY_TIMEOUT.md).
 - Android 8.1 compatible: minimum API 26, target/compile API 34.
-- Lightweight native vector avatar: blinking, gentle movement, celebrations, and an animated talking mouth.
+- Lightweight native vector avatar: blinking, gentle movement, celebrations, an animated talking mouth and surprise Peekaboo/silly faces, waves or dances while idle. Adaptive animation pacing reduces work between interactions.
 - Happy, excited, curious, caring, calm, listening, thinking, and sleepy expressions.
 - Server emotion messages plus local conversation-text cues; no extra AI service for avatar mood.
-- Touch Momo's ears, head, nose, hands, belly or feet for funny gestures and reactions.
-- Five outfits and five accessory choices (including none), saved locally.
-- Two offline games: **Momo Says** and **Tickle Race**.
+- Touch Momo's ears, head, nose, hands, belly or feet for funny gestures; accurate body-shaped hit areas prevent background touches. Swipe to pet a body part or long-press for cuddles with floating hearts.
+- Seven outfits (including pajamas and superhero cape) and seven accessory choices (including none), saved locally with a live preview.
+- Four offline games: **Momo Says** (shuffled), **Tickle Race**, **Dance Party**, and **Hug Time** (three long-press cuddles). Game steps and a progress bar stay visible during reactions, a one-tap Stop button is available, and stars from wins are saved on the watch.
+- Petting, wardrobe, stars and all games remain local during connection failures or without Wi-Fi. Talk is gray offline and only works after a completed server connection.
 - Dedicated on-screen **Talk** button (hold to record, release to send); tapping Momo never starts voice recording.
 - Physical-button push-to-talk with learn/mapping mode remains supported.
 - Microphone opens only while PTT is held and stops on release, cancellation, pause, focus loss, or connection loss.
 - Self-hosted WebSocket with automatic device-token setup and binding-code display.
-- Reduced motion and animation paused outside the foreground or while Settings is open.
+- Idle surprise gestures pause while speaking, listening, playing, in dialogs, in the background or when reduced motion is enabled.
 - Both ARM architectures, compressed native libraries, and code/resource shrinking for a small APK.
 
 See [Pet, Play, and Dress Up](docs/PLAY_AND_DRESS.md) for watch touch controls and games.
@@ -52,9 +54,26 @@ chmod +x gradlew
 
 APK: `app/build/outputs/apk/release/app-release.apk`.
 
-The release variant is currently signed with the local Android debug key for convenient installation. Signing keys are not distributed. A build on another computer may use a different signing key and cannot update an APK signed by the original key. For public releases, configure your own private release signing key and retain it for future updates. Do not commit keys or passwords to GitHub.
+Without additional configuration, release and debug APKs use the local Android debug key. Different GitHub-hosted runners often generate different debug keys, so preview APKs may **not** install over an existing APK with the same package name. Save any settings/pairing details before a necessary uninstall.
+
+### Persistent signing for updates (optional, recommended)
+
+For repeatable in-place upgrades on the watch, securely generate and **back up one permanent private keystore**, then add these four GitHub repository **Actions secrets** (Settings → Secrets and variables → Actions):
+
+- `MOMO_WATCH_SIGNING_KEYSTORE_BASE64`: Base64-encoded keystore file; encode the binary file as one continuous line (on Linux, `base64 -w0 your-watch.jks`; on Windows PowerShell, `[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\path\to\watch.jks"))`).
+- `MOMO_WATCH_SIGNING_STORE_PASSWORD`: Keystore password.
+- `MOMO_WATCH_SIGNING_KEY_ALIAS`: Alias selected when generating the key.
+- `MOMO_WATCH_SIGNING_KEY_PASSWORD`: Private-key password.
+
+GitHub Actions restores these secrets **only for trusted pushes to `main` or manually initiated `workflow_dispatch` runs**, never for pull requests or ordinary feature-branch pushes. If all four are configured, the build signs its debug APK with the persistent certificate; otherwise it uses the default debug signer. Partial configuration causes the trusted job to fail rather than silently produce an APK signed with a different key. Private keys are never committed or included in the APK artifact.
+
+Locally, set environment variables `MOMO_WATCH_KEYSTORE_PATH`, `MOMO_WATCH_KEYSTORE_PASSWORD`, `MOMO_WATCH_KEY_ALIAS` and `MOMO_WATCH_KEY_PASSWORD` to use the same signer.
+
+**Important:** A newly configured persistent key still cannot update an *older APK already signed with a different key*. Preserve the original keystore if you have one. A one-time uninstall/re-pair may be required when migrating. Keep the permanent signing key backed up securely; losing it prevents future in-place updates.
 
 ## Connect
+
+For this build, your server is prefilled. Open Settings and tap **Connect to my server** near the top: it restores both preset endpoints and connects, even if a different address was saved. Existing tokens, pairing identity, wardrobe and stars are retained. No long URL typing is required.
 
 The defaults are:
 
@@ -63,7 +82,7 @@ WebSocket: wss://xiaozhi.spacecloud.space/xiaozhi/v1/
 Device setup / OTA: https://xiaozhi.spacecloud.space/xiaozhi/ota/
 ```
 
-These are public endpoint addresses, not credentials. Change them in the app's Settings for your own server. Leave Bearer token blank and enable **Get token from my server** for automatic authentication. If a binding code appears, bind it in your server console and reconnect. Device and client identity are generated on the watch; no real watch ID or bearer token is included in this source archive.
+These are public endpoint addresses, not credentials. Change them in the app's Settings for your own server. Tap Save, then reopen Settings and tap Connect to use server changes. Display timeout choices save immediately and never reconnect. Leave Bearer token blank and enable **Get token from my server** for automatic authentication. If a binding code appears, bind it in your server console and reconnect. Device and client identity are generated on the watch; no real watch ID or bearer token is included in this source archive.
 
 The app keeps the configured WebSocket address even if the OTA response advertises a placeholder or private address. OTA setup does not download or install firmware. Normal operation does not require xiaozhi.me.
 
@@ -90,6 +109,6 @@ Then follow your new GitHub repository's instructions to add its remote and push
 
 ## Verification and credits
 
-The earlier Momo APK passed build/signature verification and tests. Version 0.3.0 adds touch-zone and outfit rendering tests; run the watch CI workflow to validate the new version. Physical watch testing remains necessary.
+The earlier Momo APK passed build/signature verification and tests. Version 0.4.5 adds the configurable app display timeout and clear offline play/voice availability, with Robolectric API 27 coverage. Hug Time and adaptive animation pacing remain included. Run watch CI and test on physical hardware. Physical watch testing remains necessary.
 
 Adapted from [jerrygugu/xiaozhi-android](https://github.com/jerrygugu/xiaozhi-android), commit `e2a026401247f8313262d8fc1e7400dd53fb8e4d`, under the MIT license. Bundled [Opus 1.5.2](https://github.com/xiph/opus/tree/v1.5.2), commit `ddbe48383984d56acd9e1ab6a090c54ca6b735a6`, retains its BSD license and notices. Momo artwork and watch adaptations were added for this build. See [third-party notices](THIRD_PARTY_NOTICES.md).

@@ -2,6 +2,10 @@ package com.xiaozhi.simple.ui.screen
 
 import android.Manifest
 import android.view.KeyEvent
+import com.xiaozhi.simple.display.*
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +26,7 @@ import com.xiaozhi.simple.R
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -50,19 +55,21 @@ fun MainScreen(model: MainViewModel) {
     val setupBusy by model.setupBusy.collectAsState()
     val mic = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
     var showSettings by rememberSaveable { mutableStateOf(false) }
-    DisposableEffect(showSettings) {
-        model.settings(showSettings)
+    var playDialog by remember { mutableStateOf(false) }
+    DisposableEffect(showSettings, playDialog) {
+        model.settings(showSettings || playDialog)
         onDispose { model.endPtt("touch") }
     }
     val label = when {
         recording -> "Listening"
         state == DeviceState.SPEAKING -> "Speaking"
-        connection is ConnectionState.Connected -> "Ready to talk"
+        connection is ConnectionState.Connected -> if (config.conversationMode == ConversationMode.CHAT) "Ready to chat" else "Ready to talk"
         connection is ConnectionState.Connecting -> "Connecting…"
         connection is ConnectionState.Error -> "Connection needs attention"
         else -> "Disconnected"
     }
     val connected = connection is ConnectionState.Connected
+    val chatMode = config.conversationMode == ConversationMode.CHAT
     val accent = when {
         recording -> Color(0xFF37CBA3)
         state == DeviceState.SPEAKING -> Color(0xFF89B4FA)
@@ -73,41 +80,57 @@ fun MainScreen(model: MainViewModel) {
         BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding().padding(horizontal = 20.dp)) {
             val wide = maxWidth >= 560.dp
             val short = maxHeight < 520.dp
-            Column(Modifier.fillMaxSize().then(if (!wide && short) Modifier.verticalScroll(rememberScrollState()) else Modifier)) {
+            Column(Modifier.fillMaxSize()) {
                 Row(Modifier.fillMaxWidth().padding(vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Text("Momo Companion", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("Momo · your little voice buddy", style = MaterialTheme.typography.labelMedium,
+                        Text("Pet, play, dress up or chat with Momo", style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = { model.endPtt(); showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "Open settings")
                     }
                 }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    FilterChip(selected = chatMode,
+                        onClick = { model.setConversationMode(ConversationMode.CHAT) }, label = { Text("Chat") })
+                    FilterChip(selected = !chatMode,
+                        onClick = { model.setConversationMode(ConversationMode.SPEAK) }, label = { Text("Speak") })
+                }
+                Text(if (chatMode) "Text replies only · Momo's voice is off" else "Voice replies on · hold to talk or type below",
+                    style = MaterialTheme.typography.bodySmall)
                 if (notice.isNotBlank() || connection is ConnectionState.Error) {
                     Text((connection as? ConnectionState.Error)?.message ?: notice,
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
                 }
-                val talk: @Composable (Modifier) -> Unit = { modifier ->
-                    TalkPanel(modifier, label, accent, recording, connected, short,
-                        mic.status.isGranted, state == DeviceState.SPEAKING, mood, config.animateAvatar, wide,
-                        onStart = { if (mic.status.isGranted) model.beginPtt() else mic.launchPermissionRequest() },
-                        onEnd = { model.endPtt("touch") }, onStop = { model.stopReply() },
-                        onConnect = { model.connect() }, requestPermission = { mic.launchPermissionRequest() })
-                }
                 if (wide) {
                     Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                        talk(Modifier.weight(0.48f).fillMaxHeight())
+                        TalkPanel(Modifier.weight(0.48f).fillMaxHeight(), label, accent, recording, connected, short,
+                        mic.status.isGranted, state == DeviceState.SPEAKING, mood, config.animateAvatar, wide,
+                        config.depthGraphics, showSettings, chatMode, onPlayDialog = { playDialog = it },
+                        onStart = { if (mic.status.isGranted) model.beginPtt() else mic.launchPermissionRequest() },
+                        onEnd = { model.endPtt("touch") }, onStop = { model.stopReply() },
+                        onConnect = { model.connectToPresetServer() }, requestPermission = { mic.launchPermissionRequest() })
                         Conversation(messages, model::clearMessages, Modifier.weight(0.52f).fillMaxHeight())
                     }
                 } else {
-                    talk(Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(16.dp))
-                    Conversation(messages, model::clearMessages, (if (short) Modifier.height(240.dp) else Modifier.weight(1f)).fillMaxWidth())
+                    // Keep the editor outside this scrolling area so IME resize cannot hide it.
+                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                        TalkPanel(Modifier.fillMaxWidth(), label, accent, recording, connected, short,
+                        mic.status.isGranted, state == DeviceState.SPEAKING, mood, config.animateAvatar, wide,
+                        config.depthGraphics, showSettings, chatMode, onPlayDialog = { playDialog = it },
+                        onStart = { if (mic.status.isGranted) model.beginPtt() else mic.launchPermissionRequest() },
+                        onEnd = { model.endPtt("touch") }, onStop = { model.stopReply() },
+                        onConnect = { model.connectToPresetServer() }, requestPermission = { mic.launchPermissionRequest() })
+                        Spacer(Modifier.height(16.dp))
+                        Conversation(messages, model::clearMessages, Modifier.height(240.dp).fillMaxWidth())
+                    }
                 }
+                TypedComposer(connected && !recording && !showSettings && !playDialog,
+                    onSend = model::sendText)
                 Text(if (recording) "Microphone on · release to send" else "Microphone off · uses your configured server",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), textAlign = TextAlign.Center)
@@ -117,33 +140,41 @@ fun MainScreen(model: MainViewModel) {
     if (showSettings) SettingsDialog(config, notice, setupInfo, setupBusy, model::getServerSetup,
         dismiss = { showSettings = false; model.settings(false) },
         save = { if (model.saveConfig(it)) { showSettings = false; model.settings(false) } },
-        connect = model::connect, disconnect = model::disconnect)
+        connect = model::connect, disconnect = model::disconnect, presetConnect = { model.connectToPresetServer(); showSettings = false; model.settings(false) })
 }
 
 @Composable
 private fun TalkPanel(modifier: Modifier, label: String, accent: Color, recording: Boolean,
     connected: Boolean, short: Boolean, permission: Boolean, speaking: Boolean,
     mood: CompanionMood, animated: Boolean, wide: Boolean,
+    depthGraphics: Boolean, settingsOpen: Boolean, chatMode: Boolean, onPlayDialog: (Boolean) -> Unit,
     onStart: () -> Unit, onEnd: () -> Unit, onStop: () -> Unit, onConnect: () -> Unit,
     requestPermission: () -> Unit) {
     Surface(modifier, shape = MaterialTheme.shapes.extraLarge, tonalElevation = 2.dp) {
-        Column(Modifier.then(if (short) Modifier.verticalScroll(rememberScrollState()) else Modifier).padding(if (short) 10.dp else 16.dp),
+        Column(Modifier.then(if (short && wide) Modifier.verticalScroll(rememberScrollState()) else Modifier).padding(if (short) 10.dp else 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(Modifier.size(8.dp), shape = CircleShape, color = accent) {}
                 Spacer(Modifier.width(8.dp))
                 Text(label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
-            MomoAvatar(mood, recording, speaking, animated,
-                Modifier.size(if (short) 86.dp else if (wide) 248.dp else 164.dp))
-            if (!short) {
-                Text("Momo · ${mood.label}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(if (recording) "I'm listening!" else mood.caption,
-                    textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp))
+            val avatarMood = when {
+                !connected -> AvatarMood.HAPPY
+                recording -> AvatarMood.LISTENING
+                else -> when (mood) {
+                    CompanionMood.EXCITED -> AvatarMood.EXCITED
+                    CompanionMood.CURIOUS, CompanionMood.SURPRISED -> AvatarMood.CURIOUS
+                    CompanionMood.THINKING -> AvatarMood.THINKING
+                    CompanionMood.CARING, CompanionMood.LOVING -> AvatarMood.CARING
+                    CompanionMood.SLEEPY -> AvatarMood.SLEEPY
+                    CompanionMood.STEADY -> AvatarMood.CALM
+                    else -> AvatarMood.HAPPY
+                }
             }
-            Surface(Modifier.widthIn(max = 300.dp).fillMaxWidth().height(if (short) 52.dp else 64.dp)
+            MomoPlayPanel(avatarMood, speaking, recording || speaking ||
+                (connected && mood == CompanionMood.THINKING), animated, depthGraphics,
+                settingsOpen, if (short) 130 else if (wide) 280 else 164, onPlayDialog)
+            if (!chatMode) Surface(Modifier.widthIn(max = 300.dp).fillMaxWidth().height(if (short) 52.dp else 64.dp)
                 .semantics {
                     contentDescription = "Push to talk. Press and hold, then release to send."
                     stateDescription = if (recording) "Microphone active" else "Microphone off"
@@ -163,14 +194,43 @@ private fun TalkPanel(modifier: Modifier, label: String, accent: Color, recordin
                     Icon(painterResource(R.drawable.ic_microphone), null, Modifier.size(26.dp),
                         tint = if (connected) Color(0xFF102E34) else MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(10.dp))
-                    Text(if (recording) "Release to send" else "Hold to talk", fontWeight = FontWeight.Bold,
+                    Text(if (!connected) "Talk offline" else if (recording) "Release to send" else "Hold to talk", fontWeight = FontWeight.Bold,
                         color = if (connected) Color(0xFF102E34) else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            if (!permission) TextButton(onClick = requestPermission) { Text("Allow microphone") }
+            if (!chatMode && connected && !permission) TextButton(onClick = requestPermission) { Text("Allow microphone") }
             else if (!connected) TextButton(onClick = onConnect) { Text("Connect to server") }
-            else if (speaking) TextButton(onClick = onStop) { Text("Stop reply") }
+            else if (!chatMode && speaking) TextButton(onClick = onStop) { Text("Stop reply") }
         }
+    }
+}
+
+@Composable
+private fun TypedComposer(connected: Boolean, onSend: (String) -> Boolean) {
+    var draft by rememberSaveable { mutableStateOf("") }
+    val display = LocalWatchDisplay.current
+    val canSend = connected && TypedChat.valid(draft)
+    val send = { if (canSend && onSend(draft)) draft = "" }
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { display.interact(); if (it.length <= TypedChat.MAX_LENGTH) draft = it },
+            modifier = Modifier.weight(1f),
+            label = { Text("Type to Momo") },
+            placeholder = { Text("Write a message…") },
+            supportingText = { Text(if (connected) "No microphone needed" else "Connect to send • your draft stays here") },
+            maxLines = 3,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { send() })
+        )
+        Button(onClick = send, enabled = canSend,
+            modifier = Modifier.semantics {
+                contentDescription = "Send typed message"
+                role = Role.Button
+                if (!canSend) disabled()
+            }) { Text("Send") }
     }
 }
 
@@ -211,7 +271,8 @@ private fun Conversation(messages: List<Message>, clear: () -> Unit, modifier: M
 @Composable
 private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: String, setupBusy: Boolean,
     getSetup: () -> Unit, dismiss: () -> Unit,
-    save: (XiaozhiConfig) -> Unit, connect: () -> Unit, disconnect: () -> Unit) {
+    save: (XiaozhiConfig) -> Unit, connect: () -> Unit, disconnect: () -> Unit,
+    presetConnect: () -> Unit) {
     var server by remember { mutableStateOf(config.serverUrl) }
     var ota by remember { mutableStateOf(config.otaUrl) }
     var token by remember(config.token) { mutableStateOf(config.token) }
@@ -219,8 +280,12 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
     var auto by remember { mutableStateOf(config.autoConnect) }
     var volume by remember { mutableIntStateOf(config.volumePtt) }
     var animations by remember { mutableStateOf(config.animateAvatar) }
+    var depthGraphics by remember { mutableStateOf(config.depthGraphics) }
+    val display = LocalWatchDisplay.current
+    val timeoutSeconds by display.timeoutSeconds.collectAsState()
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     Dialog(dismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        BindWatchDialog()
         Surface(Modifier.widthIn(max = 640.dp).fillMaxWidth().fillMaxHeight(0.94f)
             .safeDrawingPadding().imePadding().padding(12.dp), shape = MaterialTheme.shapes.extraLarge) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -228,16 +293,31 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     Text("Settings", style = MaterialTheme.typography.headlineSmall)
                     TextButton(onClick = dismiss) { Text("Close") }
                 }
-                OutlinedTextField(server, { server = it }, Modifier.fillMaxWidth(), label = { Text("WebSocket server") }, singleLine = true)
-                OutlinedTextField(ota, { ota = it }, Modifier.fillMaxWidth(), label = { Text("OTA address") }, singleLine = true,
+                Button(onClick = presetConnect, modifier = Modifier.fillMaxWidth()) {
+                    Text("Connect to my server")
+                }
+                Text("xiaozhi.spacecloud.space • preset address", style = MaterialTheme.typography.bodySmall)
+                Text("Display auto-off", style = MaterialTheme.typography.titleMedium)
+                Text("After inactivity Momo goes dark; Android controls physical sleep.",
+                    style = MaterialTheme.typography.bodySmall)
+                WatchDisplayController.TIMEOUT_OPTIONS.forEach { seconds ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(timeoutSeconds == seconds, { display.setTimeout(seconds) })
+                        Text(if (seconds < 60) "$seconds seconds" else "${seconds/60} minutes")
+                    }
+                }
+                Text("Timeout saves immediately.", style = MaterialTheme.typography.bodySmall)
+                HorizontalDivider()
+                OutlinedTextField(server, { display.interact(); server = it }, Modifier.fillMaxWidth(), label = { Text("WebSocket server") }, singleLine = true)
+                OutlinedTextField(ota, { display.interact(); ota = it }, Modifier.fillMaxWidth(), label = { Text("OTA address") }, singleLine = true,
                     supportingText = { Text("Optional connection setup only. No firmware downloads. Save changed addresses before requesting setup.") })
                 OutlinedButton(onClick = getSetup, enabled = !setupBusy, modifier = Modifier.fillMaxWidth()) {
                     Text(if (setupBusy) "Checking server…" else "Get server setup")
                 }
                 if (setupInfo.isNotBlank()) Text(setupInfo, style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(token, { token = it }, Modifier.fillMaxWidth(), label = { Text("Bearer token (optional)") },
+                OutlinedTextField(token, { display.interact(); token = it }, Modifier.fillMaxWidth(), label = { Text("Bearer token (optional)") },
                     singleLine = true, visualTransformation = PasswordVisualTransformation())
-                OutlinedTextField(device, { device = it }, Modifier.fillMaxWidth(), label = { Text("Device ID") }, singleLine = true,
+                OutlinedTextField(device, { display.interact(); device = it }, Modifier.fillMaxWidth(), label = { Text("Device ID") }, singleLine = true,
                     supportingText = { Text("Random app identity. Register this ID in your self-hosted dashboard if required.") })
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(auto, { auto = it }); Spacer(Modifier.width(12.dp)); Text("Connect when app opens")
@@ -247,7 +327,14 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(animations, { animations = it }); Spacer(Modifier.width(12.dp)); Text("Gentle avatar animations")
                 }
-                Text("Momo reacts to server emotions and conversation cues on this device. Tap Momo to wave. These are playful expressions, not a reading of your feelings.", style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(depthGraphics, { depthGraphics = it })
+                    Spacer(Modifier.width(12.dp))
+                    Text("3D depth view")
+                }
+                Text("Same watch Momo with sculpted depth and soft lighting. Classic graphics are available if your phone needs them.",
+                    style = MaterialTheme.typography.bodySmall)
+                Text("Momo reacts to server emotions and conversation cues on this device. Tap each body part, swipe to pet or hold for cuddles. Play and Dress work offline. These are playful expressions, not a reading of your feelings.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = {
                     clipboard.setText(androidx.compose.ui.text.AnnotatedString(MOMO_VOICE_PROMPT))
                 }, modifier = Modifier.fillMaxWidth()) { Text("Copy playful English voice instructions") }
@@ -270,7 +357,7 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     OutlinedButton(onClick = disconnect, Modifier.weight(1f)) { Text("Disconnect") }
                 }
                 Button(onClick = { save(config.copy(serverUrl = server, otaUrl = ota, token = token, deviceId = device,
-                    autoConnect = auto, volumePtt = volume, animateAvatar = animations)) }, modifier = Modifier.fillMaxWidth()) { Text("Save & reconnect") }
+                    autoConnect = auto, volumePtt = volume, animateAvatar = animations, depthGraphics = depthGraphics)) }, modifier = Modifier.fillMaxWidth()) { Text("Save settings") }
             }
         }
     }

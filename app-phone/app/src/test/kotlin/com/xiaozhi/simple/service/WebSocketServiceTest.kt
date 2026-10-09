@@ -128,6 +128,44 @@ class WebSocketServiceTest {
             assertEquals(1, server.requestCount)
         } finally { service.release(); server.shutdown() }
     }
+    @Test fun typedChatWaitsForHandshakeAndSendsTextWithoutAudio() {
+        val server = MockWebServer()
+        val incoming = LinkedBlockingQueue<String>()
+        val binary = LinkedBlockingQueue<ByteString>()
+        val open = CountDownLatch(1)
+        lateinit var remote: WebSocket
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                remote = webSocket; open.countDown()
+            }
+            override fun onMessage(webSocket: WebSocket, text: String) { incoming.add(text) }
+            override fun onMessage(webSocket: WebSocket, bytes: ByteString) { binary.add(bytes) }
+        }))
+        server.start()
+        val service = WebSocketService(true)
+        try {
+            assertFalse(service.sendText("Offline"))
+            service.connect(server.url("/").toString().replace("http:", "ws:"), "device", "client", "")
+            assertTrue(open.await(5, TimeUnit.SECONDS))
+            assertNotNull(incoming.poll(5,TimeUnit.SECONDS)) // hello only
+            assertFalse(service.sendText("Before handshake"))
+            remote.send("""{"type":"hello","transport":"websocket","session_id":"typed-session"}""")
+            awaitState(service) { it is ConnectionState.Connected }
+            assertFalse(service.sendText("   "))
+            assertFalse(service.sendText("x".repeat(2001)))
+            val text = "Hello \"Momo\"! 你好 💗"
+            assertTrue(service.sendText("  $text  "))
+            val packet = JsonParser.parseString(incoming.poll(5,TimeUnit.SECONDS)).asJsonObject
+            assertEquals("listen",packet.get("type").asString)
+            assertEquals("detect",packet.get("state").asString)
+            assertEquals("typed-session",packet.get("session_id").asString)
+            assertEquals(text,packet.get("text").asString)
+            assertNull(incoming.poll(200,TimeUnit.MILLISECONDS))
+            assertNull(binary.poll(200,TimeUnit.MILLISECONDS))
+            service.disconnect()
+            assertFalse(service.sendText("After disconnect"))
+        } finally { service.release(); server.shutdown() }
+    }
     private fun awaitState(service: WebSocketService, condition: (ConnectionState) -> Boolean) {
         val deadline = System.currentTimeMillis() + 5000
         while (!condition(service.connectionState.value) && System.currentTimeMillis() < deadline) Thread.sleep(10)
