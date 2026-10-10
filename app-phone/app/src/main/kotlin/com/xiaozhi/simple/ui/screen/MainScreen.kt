@@ -61,6 +61,7 @@ fun MainScreen(model: MainViewModel) {
     val momoReady by model.momoReady.collectAsState()
     val momoChatBusy by model.momoChatBusy.collectAsState()
     val momoChatError by model.momoChatError.collectAsState()
+    val momoVoiceError by model.momoVoiceError.collectAsState()
     val momoMessages by model.momoMessages.collectAsState()
     var draft by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(momoMessages.lastOrNull()?.id) {
@@ -111,7 +112,7 @@ fun MainScreen(model: MainViewModel) {
                 }
                 if (momoMode) {
                     Text("Momo AI Server · ai.momolegend.fun", style = MaterialTheme.typography.titleSmall)
-                    Text(if (momoChatBusy) "Momo is thinking…" else if (momoReady) "Paired · text chat available" else "Pair this phone in Settings to chat",
+                    Text(if (momoChatBusy) "Momo is thinking…" else if (momoReady) "QR credential saved · ready to send" else "Pair this phone in Settings to chat",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                     Text("Voice prefers device speech with automatic server fallback. Conversation memory follows your assigned agent settings.",
                         style = MaterialTheme.typography.bodySmall)
@@ -127,6 +128,8 @@ fun MainScreen(model: MainViewModel) {
                     if (state == DeviceState.SPEAKING) TextButton(onClick = { model.stopReply() }) { Text("Stop reply") }
                     if (!momoReady) Button(onClick = { showSettings = true }) { Text("Pair with Momo") }
                     if (momoChatError.isNotBlank()) Text(momoChatError, color = MaterialTheme.colorScheme.error)
+                    if (momoVoiceError.isNotBlank()) Text("Voice: $momoVoiceError", color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
                     Conversation(momoMessages, model::clearMomoMessages,
                         (if (short) Modifier.height(240.dp) else Modifier.weight(1f)).fillMaxWidth(), busy = momoChatBusy)
                     OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -147,7 +150,7 @@ fun MainScreen(model: MainViewModel) {
                         TextButton(onClick = { showSettings = true }) { Text("Pair with Momo AI Server") }
                     }
                 } else Text("Uses separate Xiaozhi registration and credentials.", style = MaterialTheme.typography.bodySmall)
-                val voiceNotice = if (voiceBackend == VoiceBackend.MOMO) momoChatError.ifBlank { notice } else notice
+                val voiceNotice = if (voiceBackend == VoiceBackend.MOMO) momoVoiceError.ifBlank { notice } else notice
                 if (voiceNotice.isNotBlank() || connection is ConnectionState.Error) {
                     Text((connection as? ConnectionState.Error)?.message ?: voiceNotice,
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,

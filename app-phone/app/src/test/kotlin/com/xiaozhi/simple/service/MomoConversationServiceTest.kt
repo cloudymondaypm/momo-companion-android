@@ -82,13 +82,14 @@ class MomoConversationServiceTest {
         } finally { service.release(); server.shutdown() }
     }
 
-    @Test fun revokedHandshakeExplainsMomoPairingAndDoesNotRetry() {
+    @Test fun rejectedHandshakePreservesCredentialAndExplainsVoiceRoute() {
         val server = MockWebServer().apply { enqueue(MockResponse().setResponseCode(403)); start() }
         val service = MomoConversationService(server.url("/").toString(), OkHttpClient())
         try {
             val error = runCatching { runBlocking { service.checkConnection("revoked-token") } }.exceptionOrNull()
-            assertEquals(403, (error as MomoChatService.ChatException).status)
-            assertTrue(error.message!!.contains("Pair this phone again"))
+            assertEquals(403, (error as MomoConversationService.HandshakeRejected).status)
+            assertTrue(error.message!!.contains("QR credential is still saved"))
+            assertFalse(error.message!!.contains("invalid or revoked"))
             assertFalse(error.message!!.contains("Get server setup"))
             assertEquals(1, server.requestCount)
         } finally { service.release(); server.shutdown() }

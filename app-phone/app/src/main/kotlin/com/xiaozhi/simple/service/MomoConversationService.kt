@@ -20,6 +20,9 @@ class MomoConversationService internal constructor(private val url: String, priv
         OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(0, TimeUnit.SECONDS)
             .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build())
     class Unsupported : IOException("Momo voice endpoint unavailable. Ask the server owner to enable /api/device/conversation.")
+    class HandshakeRejected(val status: Int) : IOException(
+        "Momo voice connection was rejected (HTTP $status). Your QR credential is still saved. " +
+            "Retry; if Momo Chat works, check the server's voice gateway and device-token forwarding.")
     private val gate = Any()
     private var generation = 0L
     private var active: WebSocket? = null
@@ -99,6 +102,7 @@ class MomoConversationService internal constructor(private val url: String, priv
                             }
                             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = synchronized(gate) {
                                 fail(if (!submitted && response?.code in listOf(404, 426, 501)) Unsupported()
+                                    else if (!submitted && response?.code in listOf(401, 403)) HandshakeRejected(response!!.code)
                                     else MomoChatService.ChatException(response?.code ?: 0, errorMessage(response?.code ?: 0)), webSocket)
                             }
                             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) = synchronized(gate) {

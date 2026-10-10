@@ -33,6 +33,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val momoPairing = MomoPairingService()
     private val momoChat = MomoChatService()
     private val momoConversation = MomoConversationService()
+    private val momoAccess = MomoDeviceAccess({ credentials.readMomo() }, momoChat, momoConversation)
     private val momoVoice = MomoVoiceService(application)
     private var momoVoiceJob: Job? = null
     private var momoVoiceCapture = false
@@ -43,8 +44,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val momoChatBusy: StateFlow<Boolean> = _momoChatBusy
     private val _momoChatError = MutableStateFlow("")
     val momoChatError: StateFlow<String> = _momoChatError
-    private val _momoReady = MutableStateFlow(credentials.readMomo().isNotBlank())
-    val momoReady: StateFlow<Boolean> = _momoReady
+    val momoReady: StateFlow<Boolean> = momoAccess.paired
+    private val _momoVoiceError = MutableStateFlow("")
+    val momoVoiceError: StateFlow<String> = _momoVoiceError
     private val _momoMessages = MutableStateFlow<List<Message>>(emptyList())
     val momoMessages: StateFlow<List<Message>> = _momoMessages
     private var momoPairingJob: Job? = null
@@ -102,14 +104,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var interactionGeneration = 0L
     private fun isXiaozhiVoice() = !_momoMode.value && _voiceBackend.value == VoiceBackend.XIAOZHI
     private fun canUseMomoVoice() = _momoMode.value || _voiceBackend.value == VoiceBackend.MOMO
-    private fun recordMomoError(error: Exception) {
-        val message = error.message ?: "Momo voice failed. Try again."
-        _momoChatError.value = message
-        if (!_momoMode.value) _notice.value = message
-        if (error is MomoChatService.ChatException && error.status in listOf(401, 403)) {
-            _momoReady.value = false
+    private fun recordMomoError(error: Exception, voice: Boolean = true) {
+        val message = error.message ?: "Momo request failed. Try again."
+        if (voice) {
+            _momoVoiceError.value = message
+            if (!_momoMode.value) _notice.value = message
             momoConversation.markError(message)
-        }
+        } else _momoChatError.value = message
+        // A route failure never erases or invalidates the local QR pairing.
+        // Each endpoint must still authenticate the stored credential itself.
+        momoAccess.credential()
     }
 
     fun selectVoiceBackend(backend: VoiceBackend): Boolean {
@@ -118,7 +122,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             check(prefs.edit().putString(VoiceBackend.selectionKey(selectionIdentity()), backend.name).commit())
             setupJob?.cancel(); stopInteraction(); socket.disconnect(); momoConversation.disconnect()
             _voiceBackend.value = backend
-            _messages.value = emptyList(); _notice.value = ""; _momoChatError.value = ""
+            _messages.value = emptyList(); _notice.value = ""; _momoVoiceError.value = ""
             wantsConnection = true
             connect()
             true
@@ -238,13 +242,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (!foreground || _momoMode.value) return
         if (_voiceBackend.value == VoiceBackend.MOMO) {
             if (connectionCheckJob?.isActive == true || _momoChatBusy.value) return
-            val token = credentials.readMomo()
-            if (!_momoReady.value || token.isBlank()) {
+            val token = momoAccess.credential()
+            if (token.isBlank()) {
                 momoConversation.markError("Pair this phone with Momo AI Server in Settings first.")
                 return
             }
             connectionCheckJob = viewModelScope.launch {
-                try { momoConversation.checkConnection(token); _notice.value = "" }
+                try { momoAccess.checkVoice(); _notice.value = ""; _momoVoiceError.value = "" }
                 catch (_: TimeoutCancellationException) { momoConversation.markError("Momo connection check timed out. Try again.") }
                 catch (e: CancellationException) { throw e }
                 catch (e: Exception) { recordMomoError(e) }
@@ -277,31 +281,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (message.isBlank() || message.codePointCount(0, message.length) > 8000) {
             _momoChatError.value = "Enter a message of 1–8000 characters."; return
         }
-        val token = credentials.readMomo()
+        val token = momoAccess.credential()
         if (token.isBlank()) {
-            _momoReady.value = false
-            _momoChatError.value = "Pair this phone in Settings first."; return
+            if (spoken) _momoVoiceError.value = "No saved Momo credential is available. Pair this phone in Settings."
+            else _momoChatError.value = "No saved Momo credential is available. Pair this phone in Settings."
+            return
         }
         val epoch = interactionGeneration
         momoChatJob = viewModelScope.launch {
             _momoChatBusy.value = true
-            _momoChatError.value = ""
+            if (spoken) _momoVoiceError.value = "" else _momoChatError.value = ""
             _momoMessages.value = (_momoMessages.value + Message(type = MessageType.USER, content = message)).takeLast(100)
             serverMood = false; _mood.value = CompanionMood.THINKING
             try {
-                val reply = try { momoConversation.chat(token, message, config.value.speechLanguage) }
-                    catch (e: MomoConversationService.Unsupported) {
-                        if (spoken) throw e
-                        momoChat.chat(token, message)
-                    }
+                val reply = if (spoken) momoAccess.voice(message, config.value.speechLanguage) else momoAccess.chat(message)
                 _momoMessages.value = (_momoMessages.value + Message(type = MessageType.AI, content = reply)).takeLast(100)
                 textMood(reply, reply = true)
                 if (spoken && epoch == interactionGeneration && foreground && focused && !settingsOpen && canUseMomoVoice()) speakMomoReply(token, reply)
             } catch (_: TimeoutCancellationException) {
-                _momoChatError.value = "Momo took too long to reply. The message was not retried automatically."
+                val message = "Momo took too long to reply. The message was not retried automatically."
+                if (spoken) _momoVoiceError.value = message else _momoChatError.value = message
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {
-                if (epoch == interactionGeneration) recordMomoError(e)
+                if (epoch == interactionGeneration) recordMomoError(e, voice = spoken)
             } finally {
                 if (epoch == interactionGeneration) {
                     _momoChatBusy.value = false
@@ -328,14 +330,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             done = { _deviceState.value = DeviceState.IDLE }, failed = fallback)) fallback()
     }
     private fun beginMomoPtt(source: String) {
+        val token = momoAccess.credential()
         if (!foreground || !focused || settingsOpen || owner != null || finalizingRecognition ||
-            _momoChatBusy.value || !_momoReady.value || connectionCheckJob?.isActive == true ||
+            _momoChatBusy.value || token.isBlank() || connectionCheckJob?.isActive == true ||
             (!_momoMode.value && momoConversation.connectionState.value !is ConnectionState.Connected)) return
         if (ContextCompat.checkSelfPermission(getApplication(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            _momoChatError.value = "Allow microphone access, then hold to talk."; return
+            _momoVoiceError.value = "Allow microphone access, then hold to talk."; return
         }
         momoVoiceJob?.cancel(); speech.stopSpeaking(); speech.cancelRecognition()
-        _momoChatError.value = ""; _notice.value = ""
+        _momoVoiceError.value = ""; _notice.value = ""
         moodReset?.cancel(); serverMood = false; _mood.value = CompanionMood.CURIOUS
         owner = source; momoVoiceCapture = true; localRecording.value = true
         _deviceState.value = DeviceState.LISTENING
@@ -349,18 +352,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }, failure = {
                 localCapture = false; finalizingRecognition = false
                 if (owner != null && foreground && focused && !settingsOpen && momoVoice.startRecording()) {
-                    _momoChatError.value = "Local recognition failed. Server microphone is active; please repeat."
+                    _momoVoiceError.value = "Local recognition failed. Server microphone is active; please repeat."
                 } else {
                     owner = null; momoVoiceCapture = false; localRecording.value = false
                     _deviceState.value = DeviceState.IDLE
-                    _momoChatError.value = "Local recognition unavailable. Hold again to use server recognition."
+                    _momoVoiceError.value = "Local recognition unavailable. Hold again to use server recognition."
                 }
             })) return
             localCapture = false
         }
         if (!momoVoice.startRecording()) {
             owner = null; momoVoiceCapture = false; localRecording.value = false
-            _deviceState.value = DeviceState.IDLE; _momoChatError.value = "Microphone could not start. Try again."
+            _deviceState.value = DeviceState.IDLE; _momoVoiceError.value = "Microphone could not start. Try again."
         }
     }
     fun getServerSetup() {
@@ -399,8 +402,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         credentials.bindMomo(bound)
         _momoLinkedDevice.value = bound.deviceId
         _voiceBackend.value = VoiceBackend.fromSaved(prefs.getString(VoiceBackend.selectionKey(bound.deviceId), null))
-        _momoReady.value = true
-        _momoChatError.value = ""
+        momoAccess.credential()
+        _momoChatError.value = ""; _momoVoiceError.value = ""
         useMomo(true)
         _momoPairingInfo.value = "Device bound to Momo AI Server. Open Momo chat to send a message. Hybrid Momo voice is ready. Server fallback requires STT/TTS enabled for your assigned agent."
         _momoCode.value = ""

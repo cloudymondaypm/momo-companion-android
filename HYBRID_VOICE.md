@@ -49,10 +49,16 @@ Momo sends text through `/api/device/conversation` with `X-Device-Token`. The
 assigned tenant, agent, memory subject and tool permissions remain server owned.
 A connection check validates Momo's version-1 text hello without sending a
 conversation or calling the agent. Ready means the last authentication check
-succeeded; each turn opens a new socket and authenticates again. A missing route,
+succeeded; each turn opens a new socket and authenticates again. Stored pairing
+is separate from endpoint authorization. A voice rejection never changes the
+stored-pairing indicator or disables typed chat; retries read the QR token afresh.
+Voice and typed-chat errors are displayed separately. A missing route,
 wrong protocol, rejected/revoked credential, timeout or lost socket is reported
-separately from Xiaozhi setup errors. Typed Momo Chat can fall back to the older
-HTTP text endpoint before submission; Hybrid Voice requires the text WebSocket.
+separately from Xiaozhi setup errors. Typed Momo Chat uses its existing authenticated
+HTTP endpoint independently; Hybrid Voice requires the text WebSocket. An HTTP
+401/403 while upgrading to voice is reported as a voice-route rejection, not
+proof that the QR pairing was revoked. If fresh HTTP chat works but voice is
+rejected, check gateway routing and device-token forwarding on the voice route.
 A submitted turn is never automatically resent after an ambiguous socket loss,
 which could otherwise repeat tool actions. Server STT uses bounded temporary
 M4A/AAC recordings; server TTS returns MP3 for playback. Cache files are deleted
