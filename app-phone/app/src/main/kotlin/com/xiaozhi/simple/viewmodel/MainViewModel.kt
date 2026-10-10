@@ -99,23 +99,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         socket.onEmotion = { raw -> viewModelScope.launch {
-            if (foreground && owner == null) CompanionMood.fromServer(raw)?.let {
+            if (!_momoMode.value && foreground && owner == null) CompanionMood.fromServer(raw)?.let {
                 serverMood = true; _mood.value = it
             }
         } }
         socket.onSttMessage = { text -> viewModelScope.launch {
-            if (foreground) { textMood(text); addMessage(Message(type = MessageType.USER, content = text)) }
+            if (!_momoMode.value && foreground) { textMood(text); addMessage(Message(type = MessageType.USER, content = text)) }
         } }
-        socket.onTextMessage = { text -> viewModelScope.launch { if (!ignoreTts) { textMood(text, reply = true); addMessage(Message(type = MessageType.AI, content = text)) } } }
+        socket.onTextMessage = { text -> viewModelScope.launch { if (!_momoMode.value && !ignoreTts) { textMood(text, reply = true); addMessage(Message(type = MessageType.AI, content = text)) } } }
         socket.onTtsStateChanged = { state -> viewModelScope.launch {
-            if (!foreground || owner != null) return@launch
+            if (_momoMode.value || !foreground || owner != null) return@launch
             when (state) {
                 "start" -> { ignoreTts = false; _deviceState.value = DeviceState.SPEAKING; audio.startPlayback() }
                 "stop" -> if (!ignoreTts) audio.finishPlayback()
             }
         } }
         socket.onAudioData = { data -> viewModelScope.launch {
-            if (foreground && owner == null && !ignoreTts) {
+            if (!_momoMode.value && foreground && owner == null && !ignoreTts) {
                 _deviceState.value = DeviceState.SPEAKING
                 audio.playAudio(data)
             }
@@ -128,7 +128,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         audio.onError = { text -> viewModelScope.launch { _notice.value = text; stopInteraction() } }
         audio.onPlaybackFinished = { viewModelScope.launch { if (owner == null) _deviceState.value = DeviceState.IDLE } }
         viewModelScope.launch { connectionState.collect { state ->
-            if (state !is ConnectionState.Connected) stopInteraction() else _notice.value = ""
+            if (!_momoMode.value) {
+                if (state !is ConnectionState.Connected) stopInteraction() else _notice.value = ""
+            }
         } }
         viewModelScope.launch { isRecording.collect { recording ->
             if (!recording && owner != null) endPtt()
