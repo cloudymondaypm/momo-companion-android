@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit
 
 /** Speech-only endpoints: never submit a conversation again to synthesize its reply. */
 class MomoSpeechApi internal constructor(private val base: HttpUrl, private val client: OkHttpClient) {
+    class SpeechException(val status: Int, val action: String, message: String) : IOException(message)
     constructor() : this((MomoPairingService.SERVER + "/api/device/voice/").toHttpUrl(),
         OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS)
             .callTimeout(70, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false)
@@ -51,10 +52,13 @@ class MomoSpeechApi internal constructor(private val base: HttpUrl, private val 
                 }
                 override fun onResponse(call: Call, response: Response) {
                     val result = runCatching { response.use {
-                        if (!it.isSuccessful) throw MomoChatService.ChatException(it.code, when (it.code) {
-                            401, 403 -> MomoConversationService.errorMessage(it.code)
+                        val speech = if (action == "transcribe") "speech recognition" else "speech synthesis"
+                        if (!it.isSuccessful) throw SpeechException(it.code, action, when (it.code) {
+                            401 -> MomoConversationService.errorMessage(it.code)
+                            403 -> "Momo server $speech is disabled or denied (HTTP 403). Your QR credential is still saved. Check $speech for the assigned agent in the Momo dashboard, or enable local phone speech in Settings."
+                            409 -> "Momo server $speech is not configured (HTTP 409). Select its model connection for the assigned agent in the Momo dashboard."
                             404 -> "Momo speech endpoint unavailable. Ask the server owner to enable device voice fallback."
-                            else -> "Momo speech failed (HTTP ${it.code}). Enable STT/TTS for the assigned agent in the dashboard."
+                            else -> "Momo server $speech failed (HTTP ${it.code}). Check the assigned agent's speech provider in the Momo dashboard."
                         })
                         if (!it.header("Content-Type").orEmpty().substringBefore(';').trim().equals(type, true)) throw IOException("Invalid Momo speech response.")
                         val source = it.body?.source() ?: throw IOException("Empty Momo speech response.")

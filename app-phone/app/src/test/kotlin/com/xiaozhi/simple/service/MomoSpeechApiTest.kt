@@ -40,13 +40,37 @@ class MomoSpeechApiTest {
             }
             val api = MomoSpeechApi(server.url("/api/device/voice/"), OkHttpClient.Builder().followRedirects(false).build())
             try {
-                val error = runCatching { api.speak("paired-token", "hello") }.exceptionOrNull() as MomoChatService.ChatException
+                val error = runCatching { api.speak("paired-token", "hello") }.exceptionOrNull() as MomoSpeechApi.SpeechException
                 assertEquals(status, error.status)
                 assertFalse(error.message!!.contains("secret-upstream-detail"))
-                if (status in listOf(401, 403)) assertTrue(error.message!!.contains("Pair this phone again"))
+                if (status == 401) assertTrue(error.message!!.contains("Pair this phone again"))
+                else assertFalse(error.message!!.contains("invalid or revoked"))
                 assertEquals(1, server.requestCount)
             } finally { api.release(); server.shutdown() }
         }
+    }
+
+    @Test fun disabledSpeechIdentifiesTheStageWithoutClaimingDeviceRevocation() = runBlocking {
+        val server = MockWebServer().apply {
+            enqueue(MockResponse().setResponseCode(403).setBody("""{"detail":"Speech recognition is disabled for this agent"}"""))
+            enqueue(MockResponse().setResponseCode(403).setBody("""{"detail":"Speech synthesis is disabled for this agent"}"""))
+            start()
+        }
+        val api = MomoSpeechApi(server.url("/api/device/voice/"), OkHttpClient())
+        try {
+            val recognition = runCatching { api.transcribe("paired-token", byteArrayOf(1), "en-US") }.exceptionOrNull() as MomoSpeechApi.SpeechException
+            val synthesis = runCatching { api.speak("paired-token", "hello") }.exceptionOrNull() as MomoSpeechApi.SpeechException
+            assertEquals("transcribe", recognition.action)
+            assertEquals("speak", synthesis.action)
+            assertTrue(recognition.message!!.contains("speech recognition is disabled or denied"))
+            assertTrue(synthesis.message!!.contains("speech synthesis is disabled or denied"))
+            for (error in listOf(recognition, synthesis)) {
+                assertEquals(403, error.status)
+                assertTrue(error.message!!.contains("QR credential is still saved"))
+                assertFalse(error.message!!.contains("Pair this phone again"))
+            }
+            assertEquals(2, server.requestCount)
+        } finally { api.release(); server.shutdown() }
     }
 
     @Test fun speechRejectsWrongContentTypeAndOversizedReplies() = runBlocking {

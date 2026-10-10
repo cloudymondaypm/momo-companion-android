@@ -118,6 +118,16 @@ Physical validation checklist (not a claim of completed hardware testing):
 Actual microphone, audio focus, offline models, Fold5 folding and Kiumo engines
 require physical-device testing.
 
+Speech fallback HTTP 403 means recognition or synthesis is disabled/denied; it
+does not prove device revocation. HTTP 409 means the agent's speech configuration
+is incomplete. These failures preserve the authenticated text connection and
+permit another hold-to-talk attempt without switching tabs. HTTP 401 still reports
+a device authentication rejection. Version 1.4.2 identifies which speech stage
+failed. In the Momo dashboard, configure speech recognition/synthesis for the
+agent assigned to this device, or enable local phone speech and install its
+offline language support. Enabling a local preference cannot provide an engine
+or model that the phone does not have.
+
 Deploy the Momo AI Server and companion-server changes before enabling new
 features. Momo's compose gateway maps the public WebSocket/speech routes to the
 API. TLS/tunnel proxies in front of it must support WebSocket upgrades. No server

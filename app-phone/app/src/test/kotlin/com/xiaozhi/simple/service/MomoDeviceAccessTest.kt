@@ -1,5 +1,6 @@
 ﻿package com.xiaozhi.simple.service
 
+import com.xiaozhi.simple.model.ConnectionState
 import kotlinx.coroutines.runBlocking
 import okhttp3.*
 import okhttp3.mockwebserver.*
@@ -9,6 +10,43 @@ import java.util.concurrent.TimeUnit
 
 /** Regression: a rejected voice route must not erase a working QR pairing or block typed chat. */
 class MomoDeviceAccessTest {
+    @Test fun disabledSpeechDoesNotRequireReconnectingOrRePairing() = runBlocking {
+        val f = Fixture()
+        val api = MomoSpeechApi(f.server.url("/api/device/voice/"), OkHttpClient())
+        f.server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send("""{"type":"hello","version":1,"transport":"text"}""") }
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { webSocket.close(code, null) }
+        }))
+        repeat(2) { f.server.enqueue(MockResponse().setResponseCode(403)) }
+        f.server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"text":"retry works"}"""))
+        f.server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody("""{"reply":"chat works"}"""))
+        try {
+            f.access.checkVoice()
+            for (action in listOf("transcribe", "speak")) {
+                val error = runCatching {
+                    if (action == "transcribe") api.transcribe(f.access.credential(), byteArrayOf(1), "en-US")
+                    else api.speak(f.access.credential(), "hello")
+                }.exceptionOrNull() as MomoSpeechApi.SpeechException
+                f.access.reportVoiceFailure(error, speechOnly = true)
+                assertEquals(ConnectionState.Connected, f.socket.connectionState.value)
+                assertTrue(f.access.paired.value)
+            }
+            assertEquals("retry works", api.transcribe(f.access.credential(), byteArrayOf(1), "en-US"))
+            assertEquals("chat works", f.access.chat("hello"))
+            assertEquals(5, f.server.requestCount)
+            repeat(5) { assertEquals("paired-qr-token", f.server.takeRequest(2, TimeUnit.SECONDS)!!.getHeader("X-Device-Token")) }
+        } finally { api.release(); f.close() }
+    }
+
+    @Test fun speechAuthenticationRejectionStillRequiresANewConnectionCheck() {
+        val f = Fixture()
+        try {
+            f.access.reportVoiceFailure(MomoSpeechApi.SpeechException(401, "transcribe", "Device rejected"), speechOnly = true)
+            assertTrue(f.socket.connectionState.value is ConnectionState.Error)
+            assertTrue(f.access.paired.value)
+            assertEquals(0, f.server.requestCount)
+        } finally { f.close() }
+    }
     private class Fixture {
         val server = MockWebServer().apply { start() }
         var persistedToken = "paired-qr-token"

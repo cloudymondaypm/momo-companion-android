@@ -104,12 +104,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var interactionGeneration = 0L
     private fun isXiaozhiVoice() = !_momoMode.value && _voiceBackend.value == VoiceBackend.XIAOZHI
     private fun canUseMomoVoice() = _momoMode.value || _voiceBackend.value == VoiceBackend.MOMO
-    private fun recordMomoError(error: Exception, voice: Boolean = true) {
+    private fun recordMomoError(error: Exception, voice: Boolean = true, speechOnly: Boolean = false) {
         val message = error.message ?: "Momo request failed. Try again."
         if (voice) {
             _momoVoiceError.value = message
             if (!_momoMode.value) _notice.value = message
-            momoConversation.markError(message)
+            momoAccess.reportVoiceFailure(error, speechOnly)
         } else _momoChatError.value = message
         // A route failure never erases or invalidates the local QR pairing.
         // Each endpoint must still authenticate the stored credential itself.
@@ -321,7 +321,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (epoch == interactionGeneration && foreground && focused && !settingsOpen && canUseMomoVoice()) momoVoiceJob = viewModelScope.launch {
                 try { momoVoice.speak(token, reply) }
                 catch (e: CancellationException) { throw e }
-                catch (e: Exception) { recordMomoError(e) }
+                catch (e: Exception) { recordMomoError(e, speechOnly = true) }
                 finally { _deviceState.value = DeviceState.IDLE }
             }
         }
@@ -529,7 +529,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val text = momoVoice.transcribe(credentials.readMomo(), file, config.value.speechLanguage)
                     if (foreground && focused && !settingsOpen) sendMomoMessage(text, spoken = true)
                 } catch (e: CancellationException) { throw e }
-                catch (e: Exception) { recordMomoError(e) }
+                catch (e: Exception) { recordMomoError(e, speechOnly = true) }
                 finally { file.delete(); finalizingRecognition = false }
             }
             return

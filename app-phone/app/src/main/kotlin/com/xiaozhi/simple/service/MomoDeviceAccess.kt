@@ -22,4 +22,13 @@ class MomoDeviceAccess(
     suspend fun chat(text: String): String = textChat.chat(requireCredential(), text)
     suspend fun voice(text: String, language: String): String = conversation.chat(requireCredential(), text, language)
     suspend fun checkVoice() { conversation.checkConnection(requireCredential()) }
+
+    fun reportVoiceFailure(error: Exception, speechOnly: Boolean = false) {
+        // Speech policy/provider/playback errors do not invalidate the text transport.
+        // An explicit device authentication rejection still requires a new check.
+        if (!speechOnly || (error is MomoSpeechApi.SpeechException && error.status == 401)) {
+            conversation.markError(error.message ?: "Momo request failed. Try again.")
+        }
+        credential()
+    }
 }

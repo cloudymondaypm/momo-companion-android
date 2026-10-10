@@ -11,8 +11,8 @@ android {
         applicationId = "space.spacecloud.xiaozhi.fold5"
         minSdk = 29
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.4.1-hybrid"
+        versionCode = 7
+        versionName = "1.4.2-hybrid"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild { cmake { arguments += "-DANDROID_STL=none" } }
