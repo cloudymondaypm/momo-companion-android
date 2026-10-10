@@ -10,5 +10,7 @@ data class XiaozhiConfig(
     val autoConnect: Boolean = true,
     val otaUrl: String = "https://xiaozhi.spacecloud.space/xiaozhi/ota/",
     val automaticToken: Boolean = true,
-    val reduceMotion: Boolean = false
+    val reduceMotion: Boolean = false,
+    val localTts: Boolean = false,
+    val speechLanguage: String = "en-US"
 )

@@ -105,14 +105,24 @@ fun MainScreen(model: MainViewModel) {
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = momoMode, onClick = { model.useMomo(true) }, label = { Text("Momo chat") })
-                    FilterChip(selected = !momoMode, onClick = { model.useMomo(false) }, label = { Text("Xiaozhi voice") })
+                    FilterChip(selected = !momoMode, onClick = { model.useMomo(false) }, label = { Text("Hybrid voice") })
                 }
                 if (momoMode) {
                     Text("Momo AI Server · ai.momolegend.fun", style = MaterialTheme.typography.titleSmall)
                     Text(if (momoChatBusy) "Momo is thinking…" else if (momoReady) "Paired · text chat available" else "Pair this phone in Settings to chat",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                    Text("Momo voice is not available. Each message is sent independently; the server does not retain conversation context.",
+                    Text("Voice prefers device speech with automatic server fallback. Conversation memory follows your assigned agent settings.",
                         style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = {}, enabled = momoReady && !momoChatBusy,
+                        modifier = Modifier.fillMaxWidth().pointerInput(momoReady, momoChatBusy, mic.status.isGranted) {
+                            detectTapGestures(onPress = {
+                                if (momoReady && !momoChatBusy) {
+                                    if (mic.status.isGranted) model.beginPtt() else mic.launchPermissionRequest()
+                                    try { awaitRelease() } finally { model.endPtt("touch") }
+                                }
+                            })
+                        }) { Text(if (recording) "Release to send" else "Hold to talk to Momo") }
+                    if (state == DeviceState.SPEAKING) TextButton(onClick = { model.stopReply() }) { Text("Stop reply") }
                     if (!momoReady) Button(onClick = { showSettings = true }) { Text("Pair with Momo") }
                     if (momoChatError.isNotBlank()) Text(momoChatError, color = MaterialTheme.colorScheme.error)
                     Conversation(momoMessages, model::clearMomoMessages,
@@ -269,6 +279,12 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
     var auto by remember { mutableStateOf(config.autoConnect) }
     var volume by remember { mutableIntStateOf(config.volumePtt) }
     var animations by remember { mutableStateOf(config.animateAvatar) }
+    var localStt by remember { mutableStateOf(config.localStt) }
+    var localTts by remember { mutableStateOf(config.localTts) }
+    var speechLanguage by remember { mutableStateOf(config.speechLanguage) }
+    var voiceName by remember { mutableStateOf(config.voiceName) }
+    var speechRate by remember { mutableFloatStateOf(config.speechRate) }
+    var speechPitch by remember { mutableFloatStateOf(config.speechPitch) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var qrScanError by remember { mutableStateOf("") }
@@ -286,7 +302,7 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                 if (momoLinkedDevice.isNotBlank()) {
                     Text("Paired Momo device: " + momoLinkedDevice,
                         style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                    Text("Your device credential is encrypted with Android Keystore. It currently supports Momo HTTP text chat, not Momo voice streaming.",
+                    Text("Your device credential is encrypted with Android Keystore. It supports Momo text and hybrid voice. Server speech must be enabled for your assigned agent.",
                         style = MaterialTheme.typography.bodySmall)
                 }
                 OutlinedButton(onClick = {
@@ -332,6 +348,27 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                 if (qrScanError.isNotBlank()) Text(qrScanError,
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 HorizontalDivider()
+                Text("Speech preferences", style = MaterialTheme.typography.titleMedium)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(localStt, { localStt = it }); Spacer(Modifier.width(12.dp)); Text("Prefer on-device recognition")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(localTts, { localTts = it }); Spacer(Modifier.width(12.dp)); Text("Prefer on-device voice")
+                }
+                Text("Unavailable services and languages use server speech. Hybrid voice requires a server device token. Older servers keep using Opus audio.", style = MaterialTheme.typography.bodySmall)
+                listOf("en-US" to "English", "fil-PH" to "Filipino / Tagalog", "taglish" to "Taglish (Filipino speech model)").forEach { (tag, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(speechLanguage == tag, { speechLanguage = tag })
+                        TextButton(onClick = { speechLanguage = tag }) { Text(label) }
+                    }
+                }
+                Text("Taglish accuracy depends on the installed model. Set the assistant's reply language in its server role prompt.", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(voiceName, { voiceName = it }, Modifier.fillMaxWidth(), label = { Text("Installed offline voice name (blank = automatic)") })
+                Text("Voice speed: %.1f".format(speechRate))
+                Slider(speechRate, { speechRate = it }, valueRange = 0.5f..2f)
+                Text("Voice pitch: %.1f".format(speechPitch))
+                Slider(speechPitch, { speechPitch = it }, valueRange = 0.5f..2f)
+                HorizontalDivider()
                 Text("Existing Xiaozhi voice server", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(server, { server = it }, Modifier.fillMaxWidth(), label = { Text("WebSocket server") }, singleLine = true)
                 OutlinedTextField(ota, { ota = it }, Modifier.fillMaxWidth(), label = { Text("OTA address") }, singleLine = true,
@@ -367,7 +404,7 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     }
                 }
                 Text("Privacy", style = MaterialTheme.typography.titleMedium)
-                Text("Microphone runs only while PTT is held. Leaving the app, losing focus, folding, or releasing cancels capture. No analytics, background recording, saved audio, or cloud backup. Token is encrypted on this device. Your server controls any server-side retention.",
+                Text("Microphone runs during push-to-talk. Release finalizes recognition; leaving the app or losing focus cancels it. Server fallback uses temporary audio that is removed after use. No analytics, background recording or cloud backup. Token is encrypted on this device. Your server controls any server-side retention.",
                     style = MaterialTheme.typography.bodySmall)
                 if (notice.isNotBlank()) Text(notice, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -375,7 +412,8 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     OutlinedButton(onClick = disconnect, Modifier.weight(1f)) { Text("Disconnect") }
                 }
                 Button(onClick = { save(config.copy(serverUrl = server, otaUrl = ota, token = token, deviceId = device,
-                    autoConnect = auto, volumePtt = volume, animateAvatar = animations)) }, modifier = Modifier.fillMaxWidth()) { Text("Save & reconnect") }
+                    autoConnect = auto, volumePtt = volume, animateAvatar = animations,
+                    localStt = localStt, localTts = localTts, speechLanguage = speechLanguage, voiceName = voiceName, speechRate = speechRate, speechPitch = speechPitch)) }, modifier = Modifier.fillMaxWidth()) { Text("Save & reconnect") }
             }
         }
     }

@@ -34,7 +34,8 @@ class WebSocketServiceTest {
             val hello = JsonParser.parseString(incoming.poll(5, TimeUnit.SECONDS)).asJsonObject
             assertEquals("opus", hello.getAsJsonObject("audio_params").get("format").asString)
             assertEquals(60, hello.getAsJsonObject("audio_params").get("frame_duration").asInt)
-            assertFalse(hello.has("features")) // no unsupported MCP capability
+            assertEquals(1, hello.getAsJsonObject("features").get("hybrid_voice").asInt)
+            assertFalse(hello.getAsJsonObject("features").has("mcp"))
             assertTrue(service.connectionState.value is ConnectionState.Connecting)
             assertFalse(service.startListening())
             remote.send("""{"type":"hello","transport":"websocket","session_id":"test-session","audio_params":{"format":"opus","sample_rate":24000,"channels":1}}""")
