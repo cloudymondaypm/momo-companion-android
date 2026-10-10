@@ -11,8 +11,10 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Only ciphertext is stored in preferences. The key stays in Android Keystore. */
-class TokenStore(private val prefs: SharedPreferences) {
-    private val alias = "fold5.server.token"
+class TokenStore(private val prefs: SharedPreferences, private val purpose: String = "server") {
+    private val alias = "fold5.$purpose.token"
+    private val ivPref = if (purpose == "server") "token_iv" else "${purpose}_token_iv"
+    private val cipherPref = if (purpose == "server") "token_cipher" else "${purpose}_token_cipher"
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (store.getKey(alias, null) as? SecretKey)?.let { return it }
@@ -22,20 +24,20 @@ class TokenStore(private val prefs: SharedPreferences) {
         }.generateKey()
     }
     fun read(): String {
-        val encrypted = prefs.getString("token_cipher", null) ?: return ""
+        val encrypted = prefs.getString(cipherPref, null) ?: return ""
         return runCatching {
-            val iv = Base64.decode(prefs.getString("token_iv", ""), Base64.NO_WRAP)
+            val iv = Base64.decode(prefs.getString(ivPref, ""), Base64.NO_WRAP)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
             String(cipher.doFinal(Base64.decode(encrypted, Base64.NO_WRAP)), Charsets.UTF_8)
         }.getOrDefault("")
     }
     fun write(token: String) {
-        if (token.isBlank()) { prefs.edit().remove("token_iv").remove("token_cipher").commit(); return }
+        if (token.isBlank()) { prefs.edit().remove(ivPref).remove(cipherPref).commit(); return }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val encrypted = cipher.doFinal(token.toByteArray(Charsets.UTF_8))
-        check(prefs.edit().putString("token_iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .putString("token_cipher", Base64.encodeToString(encrypted, Base64.NO_WRAP)).commit())
+        check(prefs.edit().putString(ivPref, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString(cipherPref, Base64.encodeToString(encrypted, Base64.NO_WRAP)).commit())
     }
 }

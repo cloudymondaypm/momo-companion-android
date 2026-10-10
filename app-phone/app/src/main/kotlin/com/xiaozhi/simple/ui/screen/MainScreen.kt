@@ -30,9 +30,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.google.accompanist.permissions.*
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 import com.xiaozhi.simple.model.*
 import com.xiaozhi.simple.viewmodel.MainViewModel
 
@@ -48,6 +50,10 @@ fun MainScreen(model: MainViewModel) {
     val notice by model.notice.collectAsState()
     val setupInfo by model.setupInfo.collectAsState()
     val setupBusy by model.setupBusy.collectAsState()
+    val momoCode by model.momoCode.collectAsState()
+    val momoPairingInfo by model.momoPairingInfo.collectAsState()
+    val momoPairingBusy by model.momoPairingBusy.collectAsState()
+    val momoLinkedDevice by model.momoLinkedDevice.collectAsState()
     val mic = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
     var showSettings by rememberSaveable { mutableStateOf(false) }
     DisposableEffect(showSettings) {
@@ -115,6 +121,11 @@ fun MainScreen(model: MainViewModel) {
         }
     }
     if (showSettings) SettingsDialog(config, notice, setupInfo, setupBusy, model::getServerSetup,
+        momoCode = momoCode, momoPairingInfo = momoPairingInfo,
+        momoPairingBusy = momoPairingBusy, momoLinkedDevice = momoLinkedDevice,
+        requestMomoCode = model::requestMomoVerificationCode,
+        claimMomoQr = model::claimMomoQr,
+        cancelMomoPairing = model::cancelMomoPairing,
         dismiss = { showSettings = false; model.settings(false) },
         save = { if (model.saveConfig(it)) { showSettings = false; model.settings(false) } },
         connect = model::connect, disconnect = model::disconnect)
@@ -210,7 +221,10 @@ private fun Conversation(messages: List<Message>, clear: () -> Unit, modifier: M
 
 @Composable
 private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: String, setupBusy: Boolean,
-    getSetup: () -> Unit, dismiss: () -> Unit,
+    getSetup: () -> Unit,
+    momoCode: String, momoPairingInfo: String, momoPairingBusy: Boolean, momoLinkedDevice: String,
+    requestMomoCode: () -> Unit, claimMomoQr: (String) -> Unit, cancelMomoPairing: () -> Unit,
+    dismiss: () -> Unit,
     save: (XiaozhiConfig) -> Unit, connect: () -> Unit, disconnect: () -> Unit) {
     var server by remember { mutableStateOf(config.serverUrl) }
     var ota by remember { mutableStateOf(config.otaUrl) }
@@ -220,6 +234,8 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
     var volume by remember { mutableIntStateOf(config.volumePtt) }
     var animations by remember { mutableStateOf(config.animateAvatar) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var qrScanError by remember { mutableStateOf("") }
     Dialog(dismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.widthIn(max = 640.dp).fillMaxWidth().fillMaxHeight(0.94f)
             .safeDrawingPadding().imePadding().padding(12.dp), shape = MaterialTheme.shapes.extraLarge) {
@@ -228,6 +244,46 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     Text("Settings", style = MaterialTheme.typography.headlineSmall)
                     TextButton(onClick = dismiss) { Text("Close") }
                 }
+                Text("Momo AI Server pairing (Android)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Pair this phone with your Momo workspace at ai.momolegend.fun. This does not change the Xiaozhi voice connection below.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (momoLinkedDevice.isNotBlank()) {
+                    Text("Paired Momo device: " + momoLinkedDevice,
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("Your device credential is encrypted with Android Keystore. It currently supports Momo HTTP text chat, not Momo voice streaming.",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+                OutlinedButton(onClick = {
+                    qrScanError = ""
+                    GmsBarcodeScanning.getClient(context).startScan()
+                        .addOnSuccessListener { barcode ->
+                            val raw = barcode.rawValue
+                            if (raw.isNullOrBlank()) qrScanError = "QR code was empty."
+                            else claimMomoQr(raw)
+                        }
+                        .addOnFailureListener { qrScanError = "Could not open QR scanner. Check Google Play services and try again." }
+                }, enabled = !momoPairingBusy, modifier = Modifier.fillMaxWidth()) {
+                    Text("Scan Momo dashboard QR code")
+                }
+                OutlinedButton(onClick = requestMomoCode, enabled = !momoPairingBusy, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (momoPairingBusy) "Waiting for verification…" else "Show six-digit verification code")
+                }
+                if (momoCode.isNotBlank()) {
+                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.medium) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Enter this code in the Momo dashboard", style = MaterialTheme.typography.labelMedium)
+                            Text(momoCode, style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Bold, letterSpacing = 6.sp)
+                            Text("The code expires in five minutes", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    OutlinedButton(onClick = cancelMomoPairing, modifier = Modifier.fillMaxWidth()) { Text("Cancel verification") }
+                }
+                if (momoPairingInfo.isNotBlank()) Text(momoPairingInfo, style = MaterialTheme.typography.bodySmall)
+                if (qrScanError.isNotBlank()) Text(qrScanError,
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                HorizontalDivider()
+                Text("Existing Xiaozhi voice server", style = MaterialTheme.typography.titleMedium)
                 OutlinedTextField(server, { server = it }, Modifier.fillMaxWidth(), label = { Text("WebSocket server") }, singleLine = true)
                 OutlinedTextField(ota, { ota = it }, Modifier.fillMaxWidth(), label = { Text("OTA address") }, singleLine = true,
                     supportingText = { Text("Optional connection setup only. No firmware downloads. Save changed addresses before requesting setup.") })

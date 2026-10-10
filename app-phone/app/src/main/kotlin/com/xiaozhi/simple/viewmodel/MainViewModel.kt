@@ -20,6 +20,17 @@ import java.util.UUID
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val prefs = application.getSharedPreferences("fold5_config", Context.MODE_PRIVATE)
     private val tokens = TokenStore(prefs)
+    private val momoTokens = TokenStore(prefs, "momo")
+    private val momoPairing = MomoPairingService()
+    private var momoPairingJob: Job? = null
+    private val _momoCode = MutableStateFlow("")
+    val momoCode: StateFlow<String> = _momoCode
+    private val _momoPairingInfo = MutableStateFlow("")
+    val momoPairingInfo: StateFlow<String> = _momoPairingInfo
+    private val _momoPairingBusy = MutableStateFlow(false)
+    val momoPairingBusy: StateFlow<Boolean> = _momoPairingBusy
+    private val _momoLinkedDevice = MutableStateFlow(prefs.getString("momo_device_id", "") ?: "")
+    val momoLinkedDevice: StateFlow<String> = _momoLinkedDevice
     private val socket = WebSocketService()
     private val audio = AudioService(application)
     private val setup = ServerSetupService()
@@ -149,6 +160,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             finally { _setupBusy.value = false }
         }
     }
+    /**
+     * Bind to Momo AI Server independently of the legacy Xiaozhi voice socket.
+     * Newly issued Momo tokens authorize its HTTP device-chat endpoint only;
+     * never overwrite the existing Xiaozhi WebSocket bearer token.
+     */
+    private fun keepBoundDevice(bound: MomoPairingService.BoundDevice) {
+        require(bound.token.isNotBlank() && bound.deviceId.isNotBlank())
+        momoTokens.write(bound.token)
+        check(prefs.edit().putString("momo_device_id", bound.deviceId).commit())
+        _momoLinkedDevice.value = bound.deviceId
+        _momoPairingInfo.value = "Device bound to Momo AI Server. HTTP text chat is ready; voice integration is coming later."
+        _momoCode.value = ""
+    }
+
+    fun requestMomoVerificationCode() {
+        momoPairingJob?.cancel()
+        momoPairingJob = viewModelScope.launch {
+            _momoPairingBusy.value = true
+            _momoPairingInfo.value = "Requesting a six-digit code from Momo AI Server…"
+            _momoCode.value = ""
+            try {
+                val current = momoPairing.requestCode("Momo Android phone")
+                _momoCode.value = current.code
+                _momoPairingInfo.value = "Enter this six-digit code in the Momo AI Server dashboard. Expires in five minutes."
+                while (isActive && System.currentTimeMillis() / 1000 < current.expiresAt) {
+                    delay(2500)
+                    val result = momoPairing.poll(current)
+                    if (result.bound != null) {
+                        keepBoundDevice(result.bound)
+                        // Confirm receipt only after the Keystore write succeeds.
+                        // If the acknowledgement fails, the saved credential
+                        // remains usable and the server expires temporary state.
+                        runCatching { momoPairing.acknowledge(current) }
+                        return@launch
+                    }
+                    if (result.status == "expired") break
+                }
+                _momoPairingInfo.value = "Code expired. Request another verification code."
+                _momoCode.value = ""
+            } catch (_: CancellationException) {
+                _momoCode.value = ""
+                throw CancellationException()
+            } catch (e: Exception) {
+                _momoPairingInfo.value = e.message?.take(160) ?: "Unable to contact Momo AI Server."
+                _momoCode.value = ""
+            } finally {
+                _momoPairingBusy.value = false
+            }
+        }
+    }
+
+    fun claimMomoQr(rawQr: String) {
+        momoPairingJob?.cancel()
+        momoPairingJob = viewModelScope.launch {
+            _momoPairingBusy.value = true
+            _momoCode.value = ""
+            _momoPairingInfo.value = "Linking this Android phone to your Momo workspace…"
+            try {
+                keepBoundDevice(momoPairing.claimQr(rawQr, "Momo Android phone"))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _momoPairingInfo.value = e.message?.take(160) ?: "QR binding failed. Please generate a new QR."
+            } finally {
+                _momoPairingBusy.value = false
+            }
+        }
+    }
+
+    fun cancelMomoPairing() {
+        momoPairingJob?.cancel()
+        _momoCode.value = ""
+        _momoPairingBusy.value = false
+        _momoPairingInfo.value = "Pairing cancelled on this phone. Verification codes expire automatically."
+    }
+
     fun stopReply() { ignoreTts = true; socket.sendAbort(); audio.stopPlayback(); if (owner == null) _deviceState.value = DeviceState.IDLE }
     fun beginPtt(source: String = "touch") {
         if (!foreground || !focused || settingsOpen || owner != null || connectionState.value !is ConnectionState.Connected) return
@@ -211,5 +298,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) { _notice.value = "Settings could not be saved securely. Try again."; false }
     }
     private fun addMessage(message: Message) { _messages.value = (_messages.value + message).takeLast(100) }
-    override fun onCleared() { foreground = false; stopInteraction(); audio.release(); socket.release(); setup.release(); super.onCleared() }
+    override fun onCleared() { foreground = false; stopInteraction(); momoPairingJob?.cancel(); momoPairing.release(); audio.release(); socket.release(); setup.release(); super.onCleared() }
 }
