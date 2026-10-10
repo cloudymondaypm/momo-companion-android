@@ -22,6 +22,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val tokens = TokenStore(prefs)
     private val momoTokens = TokenStore(prefs, "momo")
     private val momoPairing = MomoPairingService()
+    private val momoChat = MomoChatService()
+    private var momoChatJob: Job? = null
+    private val _momoMode = MutableStateFlow(prefs.getBoolean("momo_chat_mode", true))
+    val momoMode: StateFlow<Boolean> = _momoMode
+    private val _momoChatBusy = MutableStateFlow(false)
+    val momoChatBusy: StateFlow<Boolean> = _momoChatBusy
+    private val _momoChatError = MutableStateFlow("")
+    val momoChatError: StateFlow<String> = _momoChatError
+    private val _momoReady = MutableStateFlow(momoTokens.read().isNotBlank())
+    val momoReady: StateFlow<Boolean> = _momoReady
+    private val _momoMessages = MutableStateFlow<List<Message>>(emptyList())
+    val momoMessages: StateFlow<List<Message>> = _momoMessages
     private var momoPairingJob: Job? = null
     private val _momoCode = MutableStateFlow("")
     val momoCode: StateFlow<String> = _momoCode
@@ -132,12 +144,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun settings(open: Boolean) { settingsOpen = open; endPtt() }
     fun connect() {
         wantsConnection = true
-        if (!foreground) return
+        if (!foreground || _momoMode.value) return
         val cfg = config.value
         socket.connect(cfg.serverUrl, cfg.deviceId, clientId, cfg.token)
     }
     fun disconnect() { wantsConnection = false; stopInteraction(); socket.disconnect() }
     fun clearMessages() { _messages.value = emptyList() }
+    fun clearMomoMessages() { _momoMessages.value = emptyList() }
+    fun useMomo(enabled: Boolean) {
+        if (_momoMode.value == enabled) return
+        stopInteraction(); socket.disconnect()
+        momoChatJob?.cancel()
+        _momoMode.value = enabled
+        prefs.edit().putBoolean("momo_chat_mode", enabled).apply()
+        if (!enabled && wantsConnection) connect()
+    }
+    fun sendMomoMessage(raw: String) {
+        if (!_momoMode.value || _momoChatBusy.value) return
+        val message = raw.trim()
+        if (message.isBlank() || message.codePointCount(0, message.length) > 8000) {
+            _momoChatError.value = "Enter a message of 1–8000 characters."; return
+        }
+        val token = momoTokens.read()
+        if (token.isBlank()) {
+            _momoReady.value = false
+            _momoChatError.value = "Pair this phone in Settings first."; return
+        }
+        momoChatJob = viewModelScope.launch {
+            _momoChatBusy.value = true
+            _momoChatError.value = ""
+            _momoMessages.value = (_momoMessages.value + Message(type = MessageType.USER, content = message)).takeLast(100)
+            serverMood = false; _mood.value = CompanionMood.THINKING
+            try {
+                val reply = momoChat.chat(token, message)
+                _momoMessages.value = (_momoMessages.value + Message(type = MessageType.AI, content = reply)).takeLast(100)
+                textMood(reply, reply = true)
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) {
+                if (e is MomoChatService.ChatException && e.status in listOf(401, 403)) _momoReady.value = false
+                _momoChatError.value = e.message ?: "Momo chat failed. Try again."
+            } finally {
+                _momoChatBusy.value = false
+                if (_mood.value == CompanionMood.THINKING) _mood.value = CompanionMood.HAPPY
+            }
+        }
+    }
     fun getServerSetup() {
         if (_setupBusy.value) return
         val cfg = config.value
@@ -170,11 +221,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         momoTokens.write(bound.token)
         check(prefs.edit().putString("momo_device_id", bound.deviceId).commit())
         _momoLinkedDevice.value = bound.deviceId
-        _momoPairingInfo.value = "Device bound to Momo AI Server. HTTP text chat is ready; voice integration is coming later."
+        _momoReady.value = true
+        _momoChatError.value = ""
+        useMomo(true)
+        _momoPairingInfo.value = "Device bound to Momo AI Server. Open Momo chat to send a message. Momo voice is unavailable."
         _momoCode.value = ""
     }
 
     fun requestMomoVerificationCode() {
+        if (_momoPairingBusy.value || _momoChatBusy.value) return
         momoPairingJob?.cancel()
         momoPairingJob = viewModelScope.launch {
             _momoPairingBusy.value = true
@@ -212,6 +267,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun claimMomoQr(rawQr: String) {
+        if (_momoPairingBusy.value || _momoChatBusy.value) return
         momoPairingJob?.cancel()
         momoPairingJob = viewModelScope.launch {
             _momoPairingBusy.value = true
@@ -238,7 +294,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopReply() { ignoreTts = true; socket.sendAbort(); audio.stopPlayback(); if (owner == null) _deviceState.value = DeviceState.IDLE }
     fun beginPtt(source: String = "touch") {
-        if (!foreground || !focused || settingsOpen || owner != null || connectionState.value !is ConnectionState.Connected) return
+        if (_momoMode.value || !foreground || !focused || settingsOpen || owner != null || connectionState.value !is ConnectionState.Connected) return
         if (ContextCompat.checkSelfPermission(getApplication(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             _notice.value = "Allow microphone access, then press and hold again."; return
         }
@@ -266,6 +322,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     private fun stopInteraction() { endPtt(); moodReset?.cancel(); serverMood = false; _mood.value = CompanionMood.HAPPY; ignoreTts = true; audio.stopPlayback(); _deviceState.value = DeviceState.IDLE }
     fun handleHardwareKey(event: KeyEvent): Boolean {
+        if (_momoMode.value) return false
         val key = config.value.volumePtt
         if (key !in listOf(KeyEvent.KEYCODE_VOLUME_UP, KeyEvent.KEYCODE_VOLUME_DOWN) ||
             event.keyCode != key || !foreground || !focused || settingsOpen) return false
@@ -298,5 +355,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) { _notice.value = "Settings could not be saved securely. Try again."; false }
     }
     private fun addMessage(message: Message) { _messages.value = (_messages.value + message).takeLast(100) }
-    override fun onCleared() { foreground = false; stopInteraction(); momoPairingJob?.cancel(); momoPairing.release(); audio.release(); socket.release(); setup.release(); super.onCleared() }
+    override fun onCleared() { foreground = false; stopInteraction(); momoChatJob?.cancel(); momoChat.release(); momoPairingJob?.cancel(); momoPairing.release(); audio.release(); socket.release(); setup.release(); super.onCleared() }
 }

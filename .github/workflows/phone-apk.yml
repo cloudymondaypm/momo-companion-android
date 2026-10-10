@@ -12,8 +12,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: {distribution: temurin, java-version: '17', cache: gradle}
+      - name: Keep debug signing identity for subsequent builds
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: momo-phone-debug-keystore-v1
       - name: Install Android components
         run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;25.1.8937393' 'cmake;3.22.1'
-      - run: chmod +x app-phone/gradlew && ./app-phone/gradlew -p app-phone assembleDebug testDebugUnitTest
+      - run: chmod +x app-phone/gradlew && ./app-phone/gradlew -p app-phone testDebugUnitTest assembleDebug
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: {name: momo-phone-test-results, path: app-phone/app/build/reports/tests/testDebugUnitTest, if-no-files-found: warn}
       - uses: actions/upload-artifact@v4
         with: {name: momo-companion-phone-debug, path: app-phone/app/build/outputs/apk/debug/*.apk, if-no-files-found: error}

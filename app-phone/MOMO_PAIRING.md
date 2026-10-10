@@ -43,13 +43,33 @@ must approve it and choose the agent.
   `https://ai.momolegend.fun`.
 - QR tickets and six-digit codes are short-lived, single-use.
 - The server hashes pairing secrets and creates a revocable device token.
-- Pairing status is available in Android Settings, but the app's voice
-  screen continues to use its existing Xiaozhi server.
+- The main screen defaults to **Momo chat**. After pairing, type a message
+  and tap **Send to Momo**. Replies come from the dashboard-selected agent.
+- The app sends the separately encrypted Momo credential as `X-Device-Token`
+  to `https://ai.momolegend.fun/api/device/chat`. The web relay forwards only
+  this credential and message to the internal `/v1/device/chat` endpoint.
+- Each message is independent: the server currently does not accept chat
+  history. The displayed conversation stays in memory only.
+- **Xiaozhi voice** remains an explicit fallback tab, with existing preferences,
+  device identity, and encrypted bearer credential unchanged. Momo mode never
+  opens a Xiaozhi socket or enables microphone/volume-button PTT.
+- Invalid/revoked Momo credentials prompt re-pairing; connection/provider errors
+  retain the draft for retry. There is no automatic cross-server retry.
+- The verification code is displayed in a bold monospace font up to 60sp,
+  fitted to narrow screens, with selectable digits and a Copy code action.
 - Android binding currently applies only to **app-phone** (Fold 5);
   smartwatch, ESP32 and desktop pairing changes are separate milestones.
 
 ## Build
 
-The Gradle module `app-phone` adds Google Code Scanner as a dependency.
-Use the existing Android build/CI workflow and Google Play services on
-the device for scanning. These changes do not produce a prebuilt APK.
+The **Build phone APK** GitHub Actions workflow runs unit tests and produces
+the `momo-companion-phone-debug` APK artifact plus test reports. Version 1.3.0
+keeps the existing application ID and preference keys. Future debug builds
+cache their signing identity; an older APK built with a different signing key
+cannot be updated in place. Do not uninstall to work around that if you need
+to retain existing local data; use your original signing key instead.
+
+The Momo server must include the new `web/app/api/device/chat/route.ts` relay.
+On the existing server checkout, deploy with `./update` (preserves database
+volumes and secrets). A missing relay produces an actionable HTTP 404 error;
+the Android app does not send device credentials through the console login API.

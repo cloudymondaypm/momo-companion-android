@@ -3,6 +3,7 @@ package com.xiaozhi.simple.ui.screen
 import android.Manifest
 import android.view.KeyEvent
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -27,6 +28,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -54,6 +56,15 @@ fun MainScreen(model: MainViewModel) {
     val momoPairingInfo by model.momoPairingInfo.collectAsState()
     val momoPairingBusy by model.momoPairingBusy.collectAsState()
     val momoLinkedDevice by model.momoLinkedDevice.collectAsState()
+    val momoMode by model.momoMode.collectAsState()
+    val momoReady by model.momoReady.collectAsState()
+    val momoChatBusy by model.momoChatBusy.collectAsState()
+    val momoChatError by model.momoChatError.collectAsState()
+    val momoMessages by model.momoMessages.collectAsState()
+    var draft by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(momoMessages.lastOrNull()?.id) {
+        if (momoMessages.lastOrNull()?.type == MessageType.AI) draft = ""
+    }
     val mic = rememberPermissionState(Manifest.permission.RECORD_AUDIO)
     var showSettings by rememberSaveable { mutableStateOf(false) }
     DisposableEffect(showSettings) {
@@ -85,13 +96,37 @@ fun MainScreen(model: MainViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Text("Momo Companion", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Text("Momo · your little voice buddy", style = MaterialTheme.typography.labelMedium,
+                        Text(if (momoMode) "Momo · your little chat buddy" else "Momo · your little voice buddy", style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = { model.endPtt(); showSettings = true }) {
                         Icon(Icons.Default.Settings, contentDescription = "Open settings")
                     }
                 }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = momoMode, onClick = { model.useMomo(true) }, label = { Text("Momo chat") })
+                    FilterChip(selected = !momoMode, onClick = { model.useMomo(false) }, label = { Text("Xiaozhi voice") })
+                }
+                if (momoMode) {
+                    Text("Momo AI Server · ai.momolegend.fun", style = MaterialTheme.typography.titleSmall)
+                    Text(if (momoChatBusy) "Momo is thinking…" else if (momoReady) "Paired · text chat available" else "Pair this phone in Settings to chat",
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                    Text("Momo voice is not available. Each message is sent independently; the server does not retain conversation context.",
+                        style = MaterialTheme.typography.bodySmall)
+                    if (!momoReady) Button(onClick = { showSettings = true }) { Text("Pair with Momo") }
+                    if (momoChatError.isNotBlank()) Text(momoChatError, color = MaterialTheme.colorScheme.error)
+                    Conversation(momoMessages, model::clearMomoMessages,
+                        (if (short) Modifier.height(240.dp) else Modifier.weight(1f)).fillMaxWidth(), busy = momoChatBusy)
+                    OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth().padding(top = 8.dp),
+                        label = { Text("Message Momo") }, minLines = 1, maxLines = 4,
+                        enabled = !momoChatBusy,
+                        supportingText = { Text("${draft.codePointCount(0, draft.length)} / 8000 characters") })
+                    Button(onClick = { model.sendMomoMessage(draft) }, enabled = momoReady && !momoChatBusy &&
+                        draft.isNotBlank() && draft.trim().codePointCount(0, draft.trim().length) <= 8000,
+                        modifier = Modifier.fillMaxWidth()) {
+                        Text(if (momoChatBusy) "Sending…" else "Send to Momo")
+                    }
+                } else {
                 if (notice.isNotBlank() || connection is ConnectionState.Error) {
                     Text((connection as? ConnectionState.Error)?.message ?: notice,
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
@@ -117,6 +152,7 @@ fun MainScreen(model: MainViewModel) {
                 Text(if (recording) "Microphone on · release to send" else "Microphone off · uses your configured server",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), textAlign = TextAlign.Center)
+                }
             }
         }
     }
@@ -186,7 +222,7 @@ private fun TalkPanel(modifier: Modifier, label: String, accent: Color, recordin
 }
 
 @Composable
-private fun Conversation(messages: List<Message>, clear: () -> Unit, modifier: Modifier) {
+private fun Conversation(messages: List<Message>, clear: () -> Unit, modifier: Modifier, busy: Boolean = false) {
     val list = rememberLazyListState()
     LaunchedEffect(messages.lastOrNull()?.id) { if (messages.isNotEmpty()) list.animateScrollToItem(messages.lastIndex) }
     Surface(modifier, shape = MaterialTheme.shapes.extraLarge, tonalElevation = 1.dp) {
@@ -194,7 +230,7 @@ private fun Conversation(messages: List<Message>, clear: () -> Unit, modifier: M
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("Conversation", style = MaterialTheme.typography.titleMedium)
-                TextButton(onClick = clear, enabled = messages.isNotEmpty()) { Text("Clear") }
+                TextButton(onClick = clear, enabled = messages.isNotEmpty() && !busy) { Text("Clear") }
             }
             if (messages.isEmpty()) {
                 Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -245,7 +281,7 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     TextButton(onClick = dismiss) { Text("Close") }
                 }
                 Text("Momo AI Server pairing (Android)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Pair this phone with your Momo workspace at ai.momolegend.fun. This does not change the Xiaozhi voice connection below.",
+                Text("Pair this phone with your Momo workspace at ai.momolegend.fun, then open Momo chat. Your Xiaozhi voice settings below are preserved.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (momoLinkedDevice.isNotBlank()) {
                     Text("Paired Momo device: " + momoLinkedDevice,
@@ -272,8 +308,21 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.medium) {
                         Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Enter this code in the Momo dashboard", style = MaterialTheme.typography.labelMedium)
-                            Text(momoCode, style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Bold, letterSpacing = 6.sp)
+                            BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 20.dp)) {
+                                val density = androidx.compose.ui.platform.LocalDensity.current
+                                // Fit all six digits even on narrow screens and with large accessibility fonts.
+                                val size = minOf(60f, maxWidth.value / (4.5f * density.fontScale)).sp
+                                SelectionContainer {
+                                    Text(momoCode, fontSize = size, lineHeight = size * 1.2f,
+                                        fontFamily = FontFamily.Monospace, fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        textAlign = TextAlign.Center, maxLines = 1, softWrap = false,
+                                        modifier = Modifier.fillMaxWidth().semantics {
+                                            contentDescription = "Verification code: " + momoCode.toCharArray().joinToString(" ")
+                                        })
+                                }
+                            }
+                            TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(momoCode)) }) { Text("Copy code") }
                             Text("The code expires in five minutes", style = MaterialTheme.typography.bodySmall)
                         }
                     }
