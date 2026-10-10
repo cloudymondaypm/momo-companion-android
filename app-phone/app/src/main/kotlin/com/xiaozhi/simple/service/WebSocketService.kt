@@ -31,6 +31,10 @@ class WebSocketService(private val allowLocalTestServer: Boolean = false) {
     private var token = ""
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState
+    var hybridSupported = false
+        private set
+    var onDeviceReply: ((String, String) -> Unit)? = null
+    var requestHybrid = true
     var onEmotion: ((String) -> Unit)? = null
     var onTextMessage: ((String) -> Unit)? = null
     var onSttMessage: ((String) -> Unit)? = null
@@ -64,14 +68,17 @@ class WebSocketService(private val allowLocalTestServer: Boolean = false) {
         generation++
         val id = generation
         sessionId = ""
+        hybridSupported = false
         _connectionState.value = ConnectionState.Connecting
         val request = Request.Builder().url(currentUrl).header("Protocol-Version", "1")
+            .apply { if (requestHybrid && token.isNotBlank()) header("Voice-Mode", "hybrid-v1") }
             .header("Device-Id", deviceId).header("Client-Id", clientId)
             .apply { if (token.isNotEmpty()) header("Authorization", "Bearer $token") }.build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) = synchronized(this@WebSocketService) {
                 if (!enabled || id != generation) { webSocket.cancel(); return@synchronized }
                 webSocket.send(gson.toJson(mapOf("type" to "hello", "version" to 1,
+                    "features" to if (requestHybrid && token.isNotBlank()) mapOf("hybrid_voice" to 1) else emptyMap<String, Int>(),
                     "transport" to "websocket", "audio_params" to mapOf("format" to "opus",
                         "sample_rate" to 16000, "channels" to 1, "frame_duration" to 60))))
                 Unit
@@ -114,6 +121,7 @@ class WebSocketService(private val allowLocalTestServer: Boolean = false) {
         socket?.cancel()
         socket = null
         sessionId = ""
+        hybridSupported = false
         _connectionState.value = ConnectionState.Connecting
         onError?.invoke(message)
         val wait = (2000L * (1L shl attempts.coerceAtMost(4))).coerceAtMost(30000L)
@@ -140,6 +148,7 @@ class WebSocketService(private val allowLocalTestServer: Boolean = false) {
                     _connectionState.value = ConnectionState.Error("Server must support mono Opus audio.")
                     return
                 }
+                hybridSupported = runCatching { json.getAsJsonObject("features")?.get("hybrid_voice")?.asInt == 1 }.getOrDefault(false)
                 sessionId = string("session_id") ?: ""
                 timeout?.cancel()
                 attempts = 0
@@ -150,9 +159,13 @@ class WebSocketService(private val allowLocalTestServer: Boolean = false) {
             "stt" -> string("text")?.takeIf { it.isNotBlank() }?.let { onSttMessage?.invoke(it) }
             "tts" -> when (string("state")) {
                 "start" -> onTtsStateChanged?.invoke("start")
-                "sentence_start" -> string("text")?.takeIf { it.isNotBlank() }?.let { onTextMessage?.invoke(it) }
+                "sentence_start" -> string("text")?.takeIf { it.isNotBlank() }?.let {
+                    if (string("output") == "device") onDeviceReply?.invoke(it, string("turn_id") ?: "")
+                    else onTextMessage?.invoke(it)
+                }
                 "stop" -> onTtsStateChanged?.invoke("stop")
             }
+            "error" -> onError?.invoke("Voice request failed: ${string("code") ?: "unknown"}. Try again.")
             "activation_required" -> {
                 disconnect()
                 _connectionState.value = ConnectionState.Error("This server requires device activation. Register the Device ID in your server dashboard.")
@@ -160,7 +173,13 @@ class WebSocketService(private val allowLocalTestServer: Boolean = false) {
         }
     }
 
-    @Synchronized fun startListening(): Boolean = send(mapOf("type" to "listen", "state" to "start", "mode" to "manual", "session_id" to sessionId))
+    @Synchronized fun startListening(localOutput: Boolean = false): Boolean = send(mapOf("response_mode" to if (localOutput) "device" else "server", "type" to "listen", "state" to "start", "mode" to "manual", "session_id" to sessionId))
+    @Synchronized fun sendText(text: String, localOutput: Boolean): Boolean = hybridSupported &&
+        text.isNotBlank() && text.codePointCount(0, text.length) <= 8000 && send(mapOf(
+            "type" to "conversation", "text" to text, "session_id" to sessionId,
+            "response_mode" to if (localOutput) "device" else "server"))
+    @Synchronized fun requestServerTts(turnId: String): Boolean = hybridSupported &&
+        turnId.isNotBlank() && send(mapOf("type" to "tts_request", "turn_id" to turnId, "session_id" to sessionId))
     @Synchronized fun stopListening() { send(mapOf("type" to "listen", "state" to "stop", "session_id" to sessionId)) }
     @Synchronized fun sendAbort() { send(mapOf("type" to "abort", "session_id" to sessionId)) }
     @Synchronized fun sendAudio(audio: ByteArray): Boolean =

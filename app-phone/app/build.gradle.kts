@@ -11,8 +11,8 @@ android {
         applicationId = "space.spacecloud.xiaozhi.fold5"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.3.0-momo"
+        versionCode = 7
+        versionName = "1.4.2-hybrid"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild { cmake { arguments += "-DANDROID_STL=none" } }
@@ -60,8 +60,11 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
 
- tasks.withType<Test>().configureEach {
+tasks.withType<Test>().configureEach {
     systemProperty("java.library.path", ".")
 }

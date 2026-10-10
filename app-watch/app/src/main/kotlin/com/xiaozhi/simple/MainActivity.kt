@@ -43,14 +43,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::viewModel.isInitialized) viewModel.foreground(true)
+    }
     override fun onPause() {
-        if (::viewModel.isInitialized) viewModel.onPressEnd()
+        if (::viewModel.isInitialized) viewModel.foreground(false)
         super.onPause()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (!hasFocus && ::viewModel.isInitialized) viewModel.onPressEnd()
+        if (::viewModel.isInitialized) viewModel.foreground(hasFocus)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {

@@ -41,6 +41,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val otaService = OTAService()
     private var connectJob: Job? = null
     private val audioService = AudioService(application)
+    private val speech = com.xiaozhi.simple.service.DeviceSpeechService(application)
+    private var localReplyTurn = ""
+    private var replayText = false
+    private var foreground = true
+    private fun speechLocale() = if (config.value.speechLanguage == "taglish") "fil-PH" else config.value.speechLanguage
     private val deviceFingerprint = DeviceFingerprint.getInstance(application)
 
     private val prefs = application.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -122,7 +127,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             autoConnect = prefs.getBoolean("auto_connect", true),
             otaUrl = prefs.getString("ota_url", OTAService.OTA_URL) ?: OTAService.OTA_URL,
             automaticToken = prefs.getBoolean("automatic_token", true),
-            reduceMotion = prefs.getBoolean("reduce_motion", false)
+            reduceMotion = prefs.getBoolean("reduce_motion", false),
+            localTts = prefs.getBoolean("local_tts", false),
+            speechLanguage = prefs.getString("speech_language", "en-US") ?: "en-US"
         )
     }
 
@@ -135,6 +142,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             putString("ota_url", config.otaUrl.trim())
             putBoolean("automatic_token", config.automaticToken)
             putBoolean("reduce_motion", config.reduceMotion)
+            putBoolean("local_tts", config.localTts)
+            putString("speech_language", config.speechLanguage)
             apply()
         }
         _config.value = config.copy(
@@ -154,6 +163,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun setupWebSocketCallbacks() {
+        webSocketService.onDeviceReply = { text, turn -> viewModelScope.launch {
+            if (!foreground) return@launch
+            localReplyTurn = turn
+            _awaitingReply.value = false
+            addMessage(Message(type = MessageType.AI, content = text))
+            _deviceState.value = DeviceState.SPEAKING
+            val fallback = {
+                if (localReplyTurn == turn) {
+                    replayText = true
+                    localReplyTurn = ""
+                    if (!webSocketService.requestServerTts(turn)) _deviceState.value = DeviceState.IDLE
+                }
+            }
+            if (!speech.speak(text, speechLocale(), "", 1f, 1f,
+                done = { if (localReplyTurn == turn) { localReplyTurn = ""; _deviceState.value = DeviceState.IDLE } },
+                failed = fallback)) fallback()
+        } }
+
         webSocketService.onEmotion = { emotion ->
             viewModelScope.launch {
                 AvatarMoodResolver.fromServer(emotion)?.let { mood ->
@@ -175,7 +202,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 replyTimeout?.cancel()
                 val mood = serverMood ?: AvatarMoodResolver.fromText(text)
                 setMood(if (userMood == AvatarMood.CARING && mood != AvatarMood.CALM) AvatarMood.CARING else mood)
-                addMessage(Message(type = MessageType.AI, content = text))
+                if (!replayText) addMessage(Message(type = MessageType.AI, content = text))
             }
         }
 
@@ -203,7 +230,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 "end" -> {
                     _awaitingReply.value = false
-                    if (_deviceState.value == DeviceState.SPEAKING) {
+                    if (_deviceState.value == DeviceState.SPEAKING && localReplyTurn.isBlank()) {
                         _deviceState.value = DeviceState.IDLE
                     }
                 }
@@ -239,6 +266,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     token = setup.token
                 }
                 _connectionMessage.value = "Connecting to your WebSocket"
+                webSocketService.requestHybrid = cfg.localTts
                 webSocketService.connect(cfg.serverUrl, deviceId, clientId, token)
             } catch (e: CancellationException) {
                 throw e
@@ -254,11 +282,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         webSocketService.disconnect()
         audioService.stopRecording()
         audioService.stopPlayback()
+        speech.stopSpeaking(); localReplyTurn = ""; replayText = false
         _deviceState.value = DeviceState.IDLE
         _awaitingReply.value = false
         replyTimeout?.cancel()
     }
 
+    fun foreground(active: Boolean) {
+        foreground = active
+        if (!active) { onPressEnd(); speech.stopSpeaking(); localReplyTurn = "" }
+    }
     fun onPressStart() {
         if (ContextCompat.checkSelfPermission(getApplication(), Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
         if (connectionState.value !is ConnectionState.Connected) {
@@ -276,8 +309,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _deviceState.value = DeviceState.IDLE
         }
 
+        speech.stopSpeaking(); localReplyTurn = ""; replayText = false
         _deviceState.value = DeviceState.LISTENING
-        webSocketService.startListening("manual")
+        webSocketService.startListening("manual", config.value.localTts && speech.canSpeak(speechLocale(), ""))
         if (!audioService.startRecording()) onPressEnd()
     }
 
@@ -387,6 +421,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
         connectJob?.cancel()
         webSocketService.disconnect()
+        speech.release()
         audioService.release()
     }
 

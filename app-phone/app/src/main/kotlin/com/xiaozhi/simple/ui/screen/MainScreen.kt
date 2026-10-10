@@ -44,6 +44,7 @@ import com.xiaozhi.simple.viewmodel.MainViewModel
 @Composable
 fun MainScreen(model: MainViewModel) {
     val config by model.config.collectAsState()
+    val voiceBackend by model.voiceBackend.collectAsState()
     val mood by model.mood.collectAsState()
     val connection by model.connectionState.collectAsState()
     val state by model.deviceState.collectAsState()
@@ -60,6 +61,7 @@ fun MainScreen(model: MainViewModel) {
     val momoReady by model.momoReady.collectAsState()
     val momoChatBusy by model.momoChatBusy.collectAsState()
     val momoChatError by model.momoChatError.collectAsState()
+    val momoVoiceError by model.momoVoiceError.collectAsState()
     val momoMessages by model.momoMessages.collectAsState()
     var draft by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(momoMessages.lastOrNull()?.id) {
@@ -73,6 +75,7 @@ fun MainScreen(model: MainViewModel) {
     }
     val label = when {
         recording -> "Listening"
+        !momoMode && voiceBackend == VoiceBackend.MOMO && momoChatBusy -> "Momo is thinking…"
         state == DeviceState.SPEAKING -> "Speaking"
         connection is ConnectionState.Connected -> "Ready to talk"
         connection is ConnectionState.Connecting -> "Connecting…"
@@ -105,16 +108,28 @@ fun MainScreen(model: MainViewModel) {
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = momoMode, onClick = { model.useMomo(true) }, label = { Text("Momo chat") })
-                    FilterChip(selected = !momoMode, onClick = { model.useMomo(false) }, label = { Text("Xiaozhi voice") })
+                    FilterChip(selected = !momoMode, onClick = { model.useMomo(false) }, label = { Text("Hybrid voice") })
                 }
                 if (momoMode) {
                     Text("Momo AI Server · ai.momolegend.fun", style = MaterialTheme.typography.titleSmall)
-                    Text(if (momoChatBusy) "Momo is thinking…" else if (momoReady) "Paired · text chat available" else "Pair this phone in Settings to chat",
+                    Text(if (momoChatBusy) "Momo is thinking…" else if (momoReady) "QR credential saved · ready to send" else "Pair this phone in Settings to chat",
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                    Text("Momo voice is not available. Each message is sent independently; the server does not retain conversation context.",
+                    Text("Voice prefers device speech with automatic server fallback. Conversation memory follows your assigned agent settings.",
                         style = MaterialTheme.typography.bodySmall)
+                    Button(onClick = {}, enabled = momoReady && !momoChatBusy,
+                        modifier = Modifier.fillMaxWidth().pointerInput(momoReady, momoChatBusy, mic.status.isGranted) {
+                            detectTapGestures(onPress = {
+                                if (momoReady && !momoChatBusy) {
+                                    if (mic.status.isGranted) model.beginPtt() else mic.launchPermissionRequest()
+                                    try { awaitRelease() } finally { model.endPtt("touch") }
+                                }
+                            })
+                        }) { Text(if (recording) "Release to send" else "Hold to talk to Momo") }
+                    if (state == DeviceState.SPEAKING) TextButton(onClick = { model.stopReply() }) { Text("Stop reply") }
                     if (!momoReady) Button(onClick = { showSettings = true }) { Text("Pair with Momo") }
                     if (momoChatError.isNotBlank()) Text(momoChatError, color = MaterialTheme.colorScheme.error)
+                    if (momoVoiceError.isNotBlank()) Text("Voice: $momoVoiceError", color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
                     Conversation(momoMessages, model::clearMomoMessages,
                         (if (short) Modifier.height(240.dp) else Modifier.weight(1f)).fillMaxWidth(), busy = momoChatBusy)
                     OutlinedTextField(draft, { draft = it }, Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -127,8 +142,17 @@ fun MainScreen(model: MainViewModel) {
                         Text(if (momoChatBusy) "Sending…" else "Send to Momo")
                     }
                 } else {
-                if (notice.isNotBlank() || connection is ConnectionState.Error) {
-                    Text((connection as? ConnectionState.Error)?.message ?: notice,
+                VoiceServerPicker(voiceBackend, { model.selectVoiceBackend(it) })
+                if (voiceBackend == VoiceBackend.MOMO) {
+                    Text("ai.momolegend.fun · Android speech with Momo fallback", style = MaterialTheme.typography.bodySmall)
+                    if (!momoReady) {
+                        Text("Pair this phone in the Momo dashboard. Xiaozhi registration does not pair a Momo device.", style = MaterialTheme.typography.bodySmall)
+                        TextButton(onClick = { showSettings = true }) { Text("Pair with Momo AI Server") }
+                    }
+                } else Text("Uses separate Xiaozhi registration and credentials.", style = MaterialTheme.typography.bodySmall)
+                val voiceNotice = if (voiceBackend == VoiceBackend.MOMO) momoVoiceError.ifBlank { notice } else notice
+                if (voiceNotice.isNotBlank() || connection is ConnectionState.Error) {
+                    Text((connection as? ConnectionState.Error)?.message ?: voiceNotice,
                         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp))
                 }
@@ -139,15 +163,17 @@ fun MainScreen(model: MainViewModel) {
                         onEnd = { model.endPtt("touch") }, onStop = { model.stopReply() },
                         onConnect = { model.connect() }, requestPermission = { mic.launchPermissionRequest() })
                 }
+                val voiceMessages = if (voiceBackend == VoiceBackend.MOMO) momoMessages else messages
+                val clearVoice: () -> Unit = { if (voiceBackend == VoiceBackend.MOMO) model.clearMomoMessages() else model.clearMessages() }
                 if (wide) {
                     Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         talk(Modifier.weight(0.48f).fillMaxHeight())
-                        Conversation(messages, model::clearMessages, Modifier.weight(0.52f).fillMaxHeight())
+                        Conversation(voiceMessages, clearVoice, Modifier.weight(0.52f).fillMaxHeight())
                     }
                 } else {
                     talk(Modifier.fillMaxWidth())
                     Spacer(Modifier.height(16.dp))
-                    Conversation(messages, model::clearMessages, (if (short) Modifier.height(240.dp) else Modifier.weight(1f)).fillMaxWidth())
+                    Conversation(voiceMessages, clearVoice, (if (short) Modifier.height(240.dp) else Modifier.weight(1f)).fillMaxWidth())
                 }
                 Text(if (recording) "Microphone on · release to send" else "Microphone off · uses your configured server",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -157,6 +183,8 @@ fun MainScreen(model: MainViewModel) {
         }
     }
     if (showSettings) SettingsDialog(config, notice, setupInfo, setupBusy, model::getServerSetup,
+        voiceBackend = voiceBackend, selectBackend = { model.selectVoiceBackend(it) },
+        savedXiaozhiToken = model::savedXiaozhiToken,
         momoCode = momoCode, momoPairingInfo = momoPairingInfo,
         momoPairingBusy = momoPairingBusy, momoLinkedDevice = momoLinkedDevice,
         requestMomoCode = model::requestMomoVerificationCode,
@@ -165,6 +193,25 @@ fun MainScreen(model: MainViewModel) {
         dismiss = { showSettings = false; model.settings(false) },
         save = { if (model.saveConfig(it)) { showSettings = false; model.settings(false) } },
         connect = model::connect, disconnect = model::disconnect)
+}
+
+@Composable
+internal fun VoiceServerPicker(backend: VoiceBackend, select: (VoiceBackend) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth()) {
+        Text("Hybrid Voice server", style = MaterialTheme.typography.labelLarge)
+        Box(Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(backend.label + " ▾")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                VoiceBackend.values().forEach { option ->
+                    DropdownMenuItem(text = { Text(option.label + if (option == VoiceBackend.MOMO) " (default)" else " (opt-in)") },
+                        onClick = { expanded = false; select(option) })
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -256,8 +303,10 @@ private fun Conversation(messages: List<Message>, clear: () -> Unit, modifier: M
 }
 
 @Composable
-private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: String, setupBusy: Boolean,
+internal fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: String, setupBusy: Boolean,
     getSetup: () -> Unit,
+    voiceBackend: VoiceBackend, selectBackend: (VoiceBackend) -> Unit,
+    savedXiaozhiToken: (String, String) -> String,
     momoCode: String, momoPairingInfo: String, momoPairingBusy: Boolean, momoLinkedDevice: String,
     requestMomoCode: () -> Unit, claimMomoQr: (String) -> Unit, cancelMomoPairing: () -> Unit,
     dismiss: () -> Unit,
@@ -269,6 +318,12 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
     var auto by remember { mutableStateOf(config.autoConnect) }
     var volume by remember { mutableIntStateOf(config.volumePtt) }
     var animations by remember { mutableStateOf(config.animateAvatar) }
+    var localStt by remember { mutableStateOf(config.localStt) }
+    var localTts by remember { mutableStateOf(config.localTts) }
+    var speechLanguage by remember { mutableStateOf(config.speechLanguage) }
+    var voiceName by remember { mutableStateOf(config.voiceName) }
+    var speechRate by remember { mutableFloatStateOf(config.speechRate) }
+    var speechPitch by remember { mutableFloatStateOf(config.speechPitch) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var qrScanError by remember { mutableStateOf("") }
@@ -280,72 +335,98 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     Text("Settings", style = MaterialTheme.typography.headlineSmall)
                     TextButton(onClick = dismiss) { Text("Close") }
                 }
-                Text("Momo AI Server pairing (Android)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Pair this phone with your Momo workspace at ai.momolegend.fun, then open Momo chat. Your Xiaozhi voice settings below are preserved.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (momoLinkedDevice.isNotBlank()) {
-                    Text("Paired Momo device: " + momoLinkedDevice,
-                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                    Text("Your device credential is encrypted with Android Keystore. It currently supports Momo HTTP text chat, not Momo voice streaming.",
-                        style = MaterialTheme.typography.bodySmall)
-                }
-                OutlinedButton(onClick = {
-                    qrScanError = ""
-                    GmsBarcodeScanning.getClient(context).startScan()
-                        .addOnSuccessListener { barcode ->
-                            val raw = barcode.rawValue
-                            if (raw.isNullOrBlank()) qrScanError = "QR code was empty."
-                            else claimMomoQr(raw)
-                        }
-                        .addOnFailureListener { qrScanError = "Could not open QR scanner. Check Google Play services and try again." }
-                }, enabled = !momoPairingBusy, modifier = Modifier.fillMaxWidth()) {
-                    Text("Scan Momo dashboard QR code")
-                }
-                OutlinedButton(onClick = requestMomoCode, enabled = !momoPairingBusy, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (momoPairingBusy) "Waiting for verification…" else "Show six-digit verification code")
-                }
-                if (momoCode.isNotBlank()) {
-                    Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.medium) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Enter this code in the Momo dashboard", style = MaterialTheme.typography.labelMedium)
-                            BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 20.dp)) {
-                                val density = androidx.compose.ui.platform.LocalDensity.current
-                                // Fit all six digits even on narrow screens and with large accessibility fonts.
-                                val size = minOf(60f, maxWidth.value / (4.5f * density.fontScale)).sp
-                                SelectionContainer {
-                                    Text(momoCode, fontSize = size, lineHeight = size * 1.2f,
-                                        fontFamily = FontFamily.Monospace, fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        textAlign = TextAlign.Center, maxLines = 1, softWrap = false,
-                                        modifier = Modifier.fillMaxWidth().semantics {
-                                            contentDescription = "Verification code: " + momoCode.toCharArray().joinToString(" ")
-                                        })
-                                }
-                            }
-                            TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(momoCode)) }) { Text("Copy code") }
-                            Text("The code expires in five minutes", style = MaterialTheme.typography.bodySmall)
-                        }
+                VoiceServerPicker(voiceBackend, selectBackend)
+                if (voiceBackend == VoiceBackend.MOMO) {
+                    Text("Momo AI Server pairing (Android)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Pair this phone with your Momo workspace at https://ai.momolegend.fun using a QR or verification code. Chat and Hybrid Voice share this pairing. Xiaozhi credentials are separate.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (momoLinkedDevice.isNotBlank()) {
+                        Text("Paired Momo device: " + momoLinkedDevice,
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text("Your device credential is encrypted with Android Keystore. It supports Momo text and hybrid voice. Server speech must be enabled for your assigned agent.",
+                            style = MaterialTheme.typography.bodySmall)
                     }
-                    OutlinedButton(onClick = cancelMomoPairing, modifier = Modifier.fillMaxWidth()) { Text("Cancel verification") }
+                    OutlinedButton(onClick = {
+                        qrScanError = ""
+                        GmsBarcodeScanning.getClient(context).startScan()
+                            .addOnSuccessListener { barcode ->
+                                val raw = barcode.rawValue
+                                if (raw.isNullOrBlank()) qrScanError = "QR code was empty."
+                                else claimMomoQr(raw)
+                            }
+                            .addOnFailureListener { qrScanError = "Could not open QR scanner. Check Google Play services and try again." }
+                    }, enabled = !momoPairingBusy, modifier = Modifier.fillMaxWidth()) {
+                        Text("Scan Momo dashboard QR code")
+                    }
+                    OutlinedButton(onClick = requestMomoCode, enabled = !momoPairingBusy, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (momoPairingBusy) "Waiting for verification…" else "Show six-digit verification code")
+                    }
+                    if (momoCode.isNotBlank()) {
+                        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.medium) {
+                            Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Enter this code in the Momo dashboard", style = MaterialTheme.typography.labelMedium)
+                                BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 20.dp)) {
+                                    val density = androidx.compose.ui.platform.LocalDensity.current
+                                    // Fit all six digits even on narrow screens and with large accessibility fonts.
+                                    val size = minOf(60f, maxWidth.value / (4.5f * density.fontScale)).sp
+                                    SelectionContainer {
+                                        Text(momoCode, fontSize = size, lineHeight = size * 1.2f,
+                                            fontFamily = FontFamily.Monospace, fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            textAlign = TextAlign.Center, maxLines = 1, softWrap = false,
+                                            modifier = Modifier.fillMaxWidth().semantics {
+                                                contentDescription = "Verification code: " + momoCode.toCharArray().joinToString(" ")
+                                            })
+                                    }
+                                }
+                                TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(momoCode)) }) { Text("Copy code") }
+                                Text("The code expires in five minutes", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        OutlinedButton(onClick = cancelMomoPairing, modifier = Modifier.fillMaxWidth()) { Text("Cancel verification") }
+                    }
+                    if (momoPairingInfo.isNotBlank()) Text(momoPairingInfo, style = MaterialTheme.typography.bodySmall)
+                    if (qrScanError.isNotBlank()) Text(qrScanError,
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    HorizontalDivider()
                 }
-                if (momoPairingInfo.isNotBlank()) Text(momoPairingInfo, style = MaterialTheme.typography.bodySmall)
-                if (qrScanError.isNotBlank()) Text(qrScanError,
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-                HorizontalDivider()
-                Text("Existing Xiaozhi voice server", style = MaterialTheme.typography.titleMedium)
-                OutlinedTextField(server, { server = it }, Modifier.fillMaxWidth(), label = { Text("WebSocket server") }, singleLine = true)
-                OutlinedTextField(ota, { ota = it }, Modifier.fillMaxWidth(), label = { Text("OTA address") }, singleLine = true,
-                    supportingText = { Text("Optional connection setup only. No firmware downloads. Save changed addresses before requesting setup.") })
-                OutlinedButton(onClick = getSetup, enabled = !setupBusy, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (setupBusy) "Checking server…" else "Get server setup")
-                }
-                if (setupInfo.isNotBlank()) Text(setupInfo, style = MaterialTheme.typography.bodySmall)
-                OutlinedTextField(token, { token = it }, Modifier.fillMaxWidth(), label = { Text("Bearer token (optional)") },
-                    singleLine = true, visualTransformation = PasswordVisualTransformation())
-                OutlinedTextField(device, { device = it }, Modifier.fillMaxWidth(), label = { Text("Device ID") }, singleLine = true,
-                    supportingText = { Text("Random app identity. Register this ID in your self-hosted dashboard if required.") })
+                Text("Speech preferences", style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Switch(auto, { auto = it }); Spacer(Modifier.width(12.dp)); Text("Connect when app opens")
+                    Switch(localStt, { localStt = it }); Spacer(Modifier.width(12.dp)); Text("Prefer on-device recognition")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(localTts, { localTts = it }); Spacer(Modifier.width(12.dp)); Text("Prefer on-device voice")
+                }
+                Text(if (voiceBackend == VoiceBackend.MOMO) "Local speech stays on this phone. Fallback sends audio or reply text to Momo using the same pairing; enable STT/TTS for the assigned agent in the dashboard." else "Xiaozhi uses its own server token. Local speech requires Xiaozhi hybrid support; older servers keep using Opus audio.", style = MaterialTheme.typography.bodySmall)
+                listOf("en-US" to "English", "fil-PH" to "Filipino / Tagalog", "taglish" to "Taglish (Filipino speech model)").forEach { (tag, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(speechLanguage == tag, { speechLanguage = tag })
+                        TextButton(onClick = { speechLanguage = tag }) { Text(label) }
+                    }
+                }
+                Text("Taglish accuracy depends on the installed model. Set the assistant's reply language in its server role prompt.", style = MaterialTheme.typography.bodySmall)
+                OutlinedTextField(voiceName, { voiceName = it }, Modifier.fillMaxWidth(), label = { Text("Installed offline voice name (blank = automatic)") })
+                Text("Voice speed: %.1f".format(speechRate))
+                Slider(speechRate, { speechRate = it }, valueRange = 0.5f..2f)
+                Text("Voice pitch: %.1f".format(speechPitch))
+                Slider(speechPitch, { speechPitch = it }, valueRange = 0.5f..2f)
+                HorizontalDivider()
+                if (voiceBackend == VoiceBackend.XIAOZHI) {
+                    Text("Xiaozhi server (opt-in)", style = MaterialTheme.typography.titleMedium)
+                    OutlinedTextField(server, { server = it; token = savedXiaozhiToken(it.trim(), device.trim()) }, Modifier.fillMaxWidth(), label = { Text("WebSocket server") }, singleLine = true)
+                    OutlinedTextField(ota, { ota = it }, Modifier.fillMaxWidth(), label = { Text("OTA address") }, singleLine = true,
+                        supportingText = { Text("Optional connection setup only. No firmware downloads. Save changed addresses before requesting setup. Register separately with Xiaozhi; Momo pairing cannot authorize this server.") })
+                    OutlinedButton(onClick = getSetup, enabled = !setupBusy, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (setupBusy) "Checking server…" else "Get server setup")
+                    }
+                    if (setupInfo.isNotBlank()) Text(setupInfo, style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(token, { token = it }, Modifier.fillMaxWidth(), label = { Text("Bearer token (optional)") },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation())
+                    OutlinedTextField(device, { device = it; token = savedXiaozhiToken(server.trim(), it.trim()) }, Modifier.fillMaxWidth(), label = { Text("Device ID") }, singleLine = true,
+                        supportingText = { Text("Random app identity. Register this ID in your self-hosted dashboard if required.") })
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Switch(auto, { auto = it }); Spacer(Modifier.width(12.dp)); Text("Connect when app opens")
+                    }
                 }
                 HorizontalDivider()
                 Text("Momo the bunny", style = MaterialTheme.typography.titleMedium)
@@ -367,7 +448,7 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     }
                 }
                 Text("Privacy", style = MaterialTheme.typography.titleMedium)
-                Text("Microphone runs only while PTT is held. Leaving the app, losing focus, folding, or releasing cancels capture. No analytics, background recording, saved audio, or cloud backup. Token is encrypted on this device. Your server controls any server-side retention.",
+                Text("Microphone runs during push-to-talk. Release finalizes recognition; leaving the app or losing focus cancels it. Server fallback uses temporary audio that is removed after use. No analytics, background recording or cloud backup. Token is encrypted on this device. Your server controls any server-side retention.",
                     style = MaterialTheme.typography.bodySmall)
                 if (notice.isNotBlank()) Text(notice, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -375,7 +456,8 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                     OutlinedButton(onClick = disconnect, Modifier.weight(1f)) { Text("Disconnect") }
                 }
                 Button(onClick = { save(config.copy(serverUrl = server, otaUrl = ota, token = token, deviceId = device,
-                    autoConnect = auto, volumePtt = volume, animateAvatar = animations)) }, modifier = Modifier.fillMaxWidth()) { Text("Save & reconnect") }
+                    autoConnect = auto, volumePtt = volume, animateAvatar = animations,
+                    localStt = localStt, localTts = localTts, speechLanguage = speechLanguage, voiceName = voiceName, speechRate = speechRate, speechPitch = speechPitch)) }, modifier = Modifier.fillMaxWidth()) { Text("Save & reconnect") }
             }
         }
     }

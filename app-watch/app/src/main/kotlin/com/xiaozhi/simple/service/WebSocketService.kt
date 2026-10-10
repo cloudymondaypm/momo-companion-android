@@ -52,6 +52,10 @@ class WebSocketService {
     private var isManualDisconnect = false
     @Volatile private var generation = 0
 
+    var requestHybrid = false
+    var hybridSupported = false
+        private set
+    var onDeviceReply: ((String, String) -> Unit)? = null
     var onTextMessage: ((String) -> Unit)? = null
     var onEmotion: ((String) -> Unit)? = null
     var onSttMessage: ((String) -> Unit)? = null
@@ -81,6 +85,7 @@ class WebSocketService {
 
         _connectionState.value = ConnectionState.Connecting
         sessionId = null
+        hybridSupported = false
         val attemptGeneration = ++generation
         Log.d(TAG, "Connecting: $url")
 
@@ -89,6 +94,7 @@ class WebSocketService {
         val requestBuilder = Request.Builder()
             .url(url)
             .addHeader("Protocol-Version", "1")
+            .apply { if (requestHybrid && token.isNotBlank()) header("Voice-Mode", "hybrid-v1") }
             .addHeader("Device-Id", deviceId)
             .addHeader("Client-Id", serialNumber)
 
@@ -197,7 +203,7 @@ class WebSocketService {
         val hello = mapOf(
             "type" to "hello",
             "version" to 1,
-            "features" to mapOf("mcp" to false),
+            "features" to if (requestHybrid && currentToken.isNotBlank()) mapOf("mcp" to false, "hybrid_voice" to 1) else mapOf("mcp" to false),
             "transport" to "websocket",
             "audio_params" to mapOf(
                 "format" to "opus",
@@ -209,7 +215,7 @@ class WebSocketService {
         sendJson(hello)
     }
 
-    fun startListening(mode: String = "manual") {
+    fun startListening(mode: String = "manual", localOutput: Boolean = false) {
         val sid = sessionId ?: run {
             Log.w(TAG, "No session ID, cannot start listening")
             return
@@ -219,6 +225,7 @@ class WebSocketService {
                 "type" to "listen",
                 "state" to "start",
                 "mode" to mode,
+                "response_mode" to if (localOutput && hybridSupported) "device" else "server",
                 "session_id" to sid
             )
         )
@@ -255,6 +262,8 @@ class WebSocketService {
         sendJson(message)
     }
 
+    fun requestServerTts(turn: String): Boolean = hybridSupported && (webSocket?.send(gson.toJson(mapOf(
+        "type" to "tts_request", "session_id" to sessionId, "turn_id" to turn))) ?: false)
     fun sendAbort() = abort()
 
     private fun sendJson(data: Any) {
@@ -276,6 +285,7 @@ class WebSocketService {
             when (type) {
                 "llm" -> json.get("emotion")?.takeUnless { it.isJsonNull }?.asString?.let { onEmotion?.invoke(it) }
                 "hello" -> {
+                    hybridSupported = json.getAsJsonObject("features")?.get("hybrid_voice")?.asInt == 1
                     if (!sessionId.isNullOrBlank()) {
                         reconnectAttempts = 0
                         _connectionState.value = ConnectionState.Connected
@@ -294,7 +304,11 @@ class WebSocketService {
                     val ttsText = json.get("text")?.asString
                     when (state) {
                         "start", "sentence_start" -> {
-                            if (!ttsText.isNullOrEmpty()) onTextMessage?.invoke(ttsText)
+                            if (!ttsText.isNullOrEmpty()) {
+                                if (json.get("output")?.asString == "device")
+                                    onDeviceReply?.invoke(ttsText, json.get("turn_id")?.asString ?: "")
+                                else onTextMessage?.invoke(ttsText)
+                            }
                             onTtsStateChanged?.invoke("start")
                         }
                         "stop" -> onTtsStateChanged?.invoke("end")

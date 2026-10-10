@@ -6,5 +6,11 @@ data class XiaozhiConfig(
     val deviceId: String = "",
     val autoConnect: Boolean = true,
     val volumePtt: Int = 0,
-    val animateAvatar: Boolean = true
+    val animateAvatar: Boolean = true,
+    val localStt: Boolean = true,
+    val localTts: Boolean = true,
+    val speechLanguage: String = "en-US",
+    val voiceName: String = "",
+    val speechRate: Float = 1f,
+    val speechPitch: Float = 1f
 )

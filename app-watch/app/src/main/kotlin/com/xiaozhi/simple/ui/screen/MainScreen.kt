@@ -412,6 +412,8 @@ private fun WatchSettingsDialog(
     var automaticToken by remember(config.automaticToken) { mutableStateOf(config.automaticToken) }
     var otaUrl by remember(config.otaUrl) { mutableStateOf(config.otaUrl) }
     var reduceMotion by remember(config.reduceMotion) { mutableStateOf(config.reduceMotion) }
+    var localTts by remember { mutableStateOf(config.localTts) }
+    var speechLanguage by remember { mutableStateOf(config.speechLanguage) }
     val keyFocus = remember { FocusRequester() }
 
     Dialog(
@@ -495,6 +497,16 @@ private fun WatchSettingsDialog(
                     Checkbox(checked = reduceMotion, onCheckedChange = { reduceMotion = it })
                     Text("Reduce avatar motion")
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(localTts, { localTts = it }); Text("Try offline device voice")
+                }
+                Text("Android 8.1 uses server recognition. Device voice needs an installed offline engine, server token and hybrid server; otherwise server audio is used.", style = MaterialTheme.typography.bodySmall)
+                listOf("en-US" to "English", "fil-PH" to "Tagalog", "taglish" to "Taglish").forEach { (tag, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(speechLanguage == tag, { speechLanguage = tag })
+                        TextButton(onClick = { speechLanguage = tag }) { Text(label) }
+                    }
+                }
                 Text("Physical PTT button", fontWeight = FontWeight.SemiBold)
                 Text(
                     text = if (pttKeyCode == KeyEvent.KEYCODE_UNKNOWN)
@@ -555,7 +567,7 @@ private fun WatchSettingsDialog(
                                 autoConnect = autoConnect,
                                 automaticToken = automaticToken,
                                 otaUrl = otaUrl,
-                                reduceMotion = reduceMotion
+                                reduceMotion = reduceMotion, localTts = localTts, speechLanguage = speechLanguage
                             )
                         )
                     },

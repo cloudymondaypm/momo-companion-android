@@ -1,7 +1,7 @@
 # Momo Companion for Galaxy Z Fold5
 
-A private, push-to-talk Android client for a self-hosted Xiaozhi server, with an
-original animated plush bunny companion and responsive cover/inner layouts.
+A private, push-to-talk Android client for Momo AI Server or an opt-in Xiaozhi
+server, with an original animated plush bunny and responsive cover/inner layouts.
 
 ## Features
 
@@ -15,9 +15,14 @@ original animated plush bunny companion and responsive cover/inner layouts.
 - No background microphone, wake-word capture, analytics, saved audio or cloud
   backup. Tokens use Android Keystore; conversation history stays in memory.
 
-Defaults point to `wss://xiaozhi.spacecloud.space/xiaozhi/v1/` and
-`https://xiaozhi.spacecloud.space/xiaozhi/ota/`. Change them in Settings for
-another deployment. No server credentials, signing keys or passwords are bundled.
+Hybrid Voice defaults to **Momo AI Server** at `https://ai.momolegend.fun` and
+reuses the phone's Momo Chat pairing. In the **Hybrid Voice server** dropdown,
+choose **Xiaozhi server** only when you want its separate registration and voice
+protocol. Xiaozhi retains `wss://xiaozhi.spacecloud.space/xiaozhi/v1/` and
+`https://xiaozhi.spacecloud.space/xiaozhi/ota/` or your existing custom settings.
+Only the selected server's settings appear. No credentials or private signing
+keys are bundled. See [Hybrid voice](../HYBRID_VOICE.md) for protocol details,
+speech fallback and the hardware validation checklist.
 
 ## Build in Android Studio
 
@@ -72,8 +77,8 @@ licenses, rather than generated build caches or installed SDK/JDK files.
 ## Spoken personality and language
 
 Open Settings and copy the playful English voice instructions. Paste these into
-your self-hosted assistant's role/system prompt and save there. Speech language,
-voice and response content are controlled by your server. The app does not
+your self-hosted assistant's role/system prompt and save there. Local speech language, offline voice, rate and pitch are chosen in Settings.
+Server fallback voice and response content are controlled by the assigned agent. The app does not
 silently change the server prompt. Mood labels are playful visual expressions,
 not a psychological assessment of the child.
 
@@ -89,8 +94,11 @@ not a psychological assessment of the child.
 - `app/src/main/cpp`: JNI codec and complete required libopus source.
 - `app/src/test`: protocol and expression tests.
 
-Build, unit tests, Android lint, APK signature and native 16 KB alignment checks
-passed locally. No phone/emulator was attached for runtime UI or audio testing.
+Build and protocol/storage unit tests can run without a phone. UI and real
+Keystore tests are in `app/src/androidTest` and require a connected Android
+phone/emulator (`connectedDebugAndroidTest`). Compiling the test APK alone does
+not confirm these tests ran. See the validation checklist before claiming
+physical Fold5 microphone/folding compatibility.
 
 ## License
 
