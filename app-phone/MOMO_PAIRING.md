@@ -53,3 +53,13 @@ must approve it and choose the agent.
 The Gradle module `app-phone` adds Google Code Scanner as a dependency.
 Use the existing Android build/CI workflow and Google Play services on
 the device for scanning. These changes do not produce a prebuilt APK.
+# Universal dashboard and verification code visibility
+
+The embedded pairing server remains `https://ai.momolegend.fun`. The dashboard
+now offers QR or six-digit verification for companion apps and verified Xiaozhi
+ESP32 activation. This phone continues using its existing request-code/poll/ack
+and QR claim routes, including its independent polling secret and Keystore token.
+The six digits use an explicit 44sp bold single-line display with 3sp spacing.
+The separate Xiaozhi OTA/WebSocket voice settings remain available and are not
+replaced by the Momo pairing URL. Momo ESP32 activation does not supply voice.
+

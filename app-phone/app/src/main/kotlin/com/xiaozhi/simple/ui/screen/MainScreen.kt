@@ -273,7 +273,8 @@ private fun SettingsDialog(config: XiaozhiConfig, notice: String, setupInfo: Str
                         Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Enter this code in the Momo dashboard", style = MaterialTheme.typography.labelMedium)
                             Text(momoCode, style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Bold, letterSpacing = 6.sp)
+                                fontSize = 44.sp, fontWeight = FontWeight.Bold, letterSpacing = 3.sp,
+                                maxLines = 1, softWrap = false)
                             Text("The code expires in five minutes", style = MaterialTheme.typography.bodySmall)
                         }
                     }
