@@ -19,10 +19,15 @@ jobs:
           key: momo-phone-debug-keystore-v1
       - name: Install Android components
         run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;25.1.8937393' 'cmake;3.22.1'
-      - run: chmod +x app-phone/gradlew && ./app-phone/gradlew -p app-phone testDebugUnitTest assembleDebug
+      - run: chmod +x app-phone/gradlew && ./app-phone/gradlew -p app-phone testDebugUnitTest assembleDebug assembleDebugAndroidTest lintDebug
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with: {name: momo-phone-test-results, path: app-phone/app/build/reports/tests/testDebugUnitTest, if-no-files-found: warn}
       - uses: actions/upload-artifact@v4
         with: {name: momo-companion-phone-debug, path: app-phone/app/build/outputs/apk/debug/*.apk, if-no-files-found: error}
+      - uses: actions/upload-artifact@v4
+        with: {name: momo-phone-instrumentation-tests, path: app-phone/app/build/outputs/apk/androidTest/debug/*.apk, if-no-files-found: error}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: momo-phone-lint-results, path: app-phone/app/build/reports/lint-results-debug.*, if-no-files-found: warn}

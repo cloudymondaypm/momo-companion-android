@@ -11,7 +11,12 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Only ciphertext is stored in preferences. The key stays in Android Keystore. */
-class TokenStore(private val prefs: SharedPreferences, private val purpose: String = "server") {
+interface CredentialCipherStore {
+    fun read(): String
+    fun write(token: String)
+}
+
+class TokenStore(private val prefs: SharedPreferences, private val purpose: String = "server") : CredentialCipherStore {
     private val alias = "fold5.$purpose.token"
     private val ivPref = if (purpose == "server") "token_iv" else "${purpose}_token_iv"
     private val cipherPref = if (purpose == "server") "token_cipher" else "${purpose}_token_cipher"
@@ -23,7 +28,7 @@ class TokenStore(private val prefs: SharedPreferences, private val purpose: Stri
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
         }.generateKey()
     }
-    fun read(): String {
+    override fun read(): String {
         val encrypted = prefs.getString(cipherPref, null) ?: return ""
         return runCatching {
             val iv = Base64.decode(prefs.getString(ivPref, ""), Base64.NO_WRAP)
@@ -32,8 +37,8 @@ class TokenStore(private val prefs: SharedPreferences, private val purpose: Stri
             String(cipher.doFinal(Base64.decode(encrypted, Base64.NO_WRAP)), Charsets.UTF_8)
         }.getOrDefault("")
     }
-    fun write(token: String) {
-        if (token.isBlank()) { prefs.edit().remove(ivPref).remove(cipherPref).commit(); return }
+    override fun write(token: String) {
+        if (token.isBlank()) { check(prefs.edit().remove(ivPref).remove(cipherPref).commit()); return }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
         val encrypted = cipher.doFinal(token.toByteArray(Charsets.UTF_8))

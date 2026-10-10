@@ -1,8 +1,30 @@
 # Hybrid voice
 
-The phone now supports voice in **Momo chat**, using its paired device credential.
-Its **Hybrid voice** tab also supports the Xiaozhi companion server. These remain
-separate identities and servers; pairing never overwrites the Xiaozhi token.
+The phone's **Hybrid voice** screen has a **Hybrid Voice server** dropdown:
+
+- **Momo AI Server** (default): `https://ai.momolegend.fun`. Pair this phone in
+  Settings using the Momo dashboard QR or six-digit code. Existing Momo Chat
+  pairing is reused; no OTA setup or Xiaozhi bearer is involved.
+- **Xiaozhi server** (opt-in): retains the existing secure WebSocket/OTA addresses,
+  device ID and separate bearer credentials. Register with Xiaozhi independently.
+
+Only the selected server's settings are visible. Switching cancels microphone
+capture, speech, pending connection checks and pending turns before connecting to
+that protocol. An already-submitted server operation may still finish remotely;
+its result cannot revive the previous screen or trigger speech on the new backend.
+
+Selection is persisted for the current paired Momo device (or the local device
+ID before pairing). New pairings default to Momo; returning to an existing paired
+device restores its explicit choice. Legacy Xiaozhi settings are preserved but
+never silently opt the phone into Xiaozhi. Android Keystore encrypts credentials
+in separate protocol/device namespaces; Xiaozhi credentials are additionally
+scoped to the WebSocket address. Existing encrypted tokens migrate without
+re-pairing. Changing Xiaozhi's address/device restores only that identity's saved
+token, or clears the field until its own setup is completed. Momo's origin and
+current paired token are explicitly rejected by the Xiaozhi connection path.
+
+**Momo Chat** remains independent of the voice backend dropdown, and always uses
+Momo pairing. Changing the voice backend does not redirect Momo Chat to Xiaozhi.
 
 ## Phone / Fold5
 
@@ -25,7 +47,12 @@ opening settings or losing focus cancels recognition and local speech.
 
 Momo sends text through `/api/device/conversation` with `X-Device-Token`. The
 assigned tenant, agent, memory subject and tool permissions remain server owned.
-An older server without this route can use the existing HTTP text endpoint.
+A connection check validates Momo's version-1 text hello without sending a
+conversation or calling the agent. Ready means the last authentication check
+succeeded; each turn opens a new socket and authenticates again. A missing route,
+wrong protocol, rejected/revoked credential, timeout or lost socket is reported
+separately from Xiaozhi setup errors. Typed Momo Chat can fall back to the older
+HTTP text endpoint before submission; Hybrid Voice requires the text WebSocket.
 A submitted turn is never automatically resent after an ambiguous socket loss,
 which could otherwise repeat tool actions. Server STT uses bounded temporary
 M4A/AAC recordings; server TTS returns MP3 for playback. Cache files are deleted
@@ -55,10 +82,35 @@ servers and clients keep using the existing audio protocol.
 
 ## Validation and deployment
 
-Phone and watch: `testDebugUnitTest assembleDebug`. New socket regression tests
-cover paired headers, Taglish, negotiation, HTTP fallback boundaries and no
-automatic resubmission. Actual microphone, audio focus, offline models, Fold5
-folding and Kiumo engines require physical-device testing.
+Phone: `testDebugUnitTest assembleDebug assembleDebugAndroidTest`.
+Watch: `testDebugUnitTest assembleDebug`.
+UI tests: `connectedDebugAndroidTest` on a connected Android device/emulator.
+
+Regression tests cover protocol-specific headers, hello negotiation, connection
+checks without agent turns, revocation, cancellation without stale reconnection,
+no automatic resubmission, speech-only fallback routes, bounded replies,
+credential migration and per-device isolation. UI tests cover the dropdown at
+320dp cover-screen width and mutually exclusive server settings. The test APK
+can be built without a connected device; that does not confirm UI tests ran.
+
+Physical validation checklist (not a claim of completed hardware testing):
+
+- Fold5 cover screen and unfolded screen: pair once, select Momo in Hybrid Voice,
+  check connection, hold/release PTT, verify transcript/reply and local TTS.
+- Repeat with offline models absent or local STT/TTS disabled: verify authenticated
+  Momo STT/TTS fallback and meaningful errors if agent speech is disabled.
+- Fold/unfold, rotate, background, lose focus, open Settings, switch backends and
+  disconnect during recording/recognition/response/TTS: capture and speech stop;
+  no stale reply is spoken and no turn is automatically replayed.
+- Revoke the paired token: voice requests ask for Momo pairing, never Xiaozhi OTA.
+- Select Xiaozhi: original WebSocket/OTA/device ID remain; obtain its own token,
+  verify Opus PTT and capability-aware local speech, switch back and restart.
+- Kiumo Android 8.1 watch: original server/physical PTT, ARMv7 Opus capture/playback,
+  optional offline TTS, missing-engine fallback, avatar and offline play. Watch
+  remains on its existing Xiaozhi protocol; it has no Momo pairing selector.
+
+Actual microphone, audio focus, offline models, Fold5 folding and Kiumo engines
+require physical-device testing.
 
 Deploy the Momo AI Server and companion-server changes before enabling new
 features. Momo's compose gateway maps the public WebSocket/speech routes to the

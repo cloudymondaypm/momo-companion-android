@@ -40,7 +40,7 @@ class DeviceSpeechService(private val context: Context) {
 
     fun recognize(language: String, result: (String) -> Unit, failure: () -> Unit): Boolean {
         cancelRecognition()
-        if (!canRecognize(language)) return false
+        if (Build.VERSION.SDK_INT < 31 || !canRecognize(language)) return false
         val generation = recognitionGeneration
         var completed = false
         fun fail() {
