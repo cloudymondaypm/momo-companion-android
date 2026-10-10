@@ -4,6 +4,7 @@ import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.TimeUnit
@@ -73,7 +74,7 @@ class MomoChatServiceTest {
     }
 
     @Test fun cancelsPendingNetworkRequest() = fixture { server, service ->
-        server.enqueue(json("""{"reply":"late"}""").setHeadersDelay(10, TimeUnit.SECONDS))
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
         runBlocking {
             val job = launch { service.chat("device", "hi") }
             withContext(Dispatchers.IO) { assertNotNull(server.takeRequest(2, TimeUnit.SECONDS)) }
